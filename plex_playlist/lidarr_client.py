@@ -1,0 +1,267 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+import logging
+from time import perf_counter, sleep
+from typing import Any
+
+import requests
+
+from plex_playlist.exceptions import LidarrError
+from plex_playlist.runtime import ComponentHealth
+
+logger = logging.getLogger("plex_playlist")
+
+
+@dataclass(frozen=True, slots=True)
+class LidarrStatus:
+    version: str
+    app_name: str
+    instance_name: str
+    startup_path: str
+    os_name: str
+
+
+@dataclass(frozen=True, slots=True)
+class LidarrCommandStatus:
+    command_id: int
+    name: str
+    status: str
+    message: str
+    completed: bool
+    successful: bool
+
+
+class LidarrClient:
+    """Small, typed-at-the-boundary Lidarr API client."""
+
+    def __init__(
+        self,
+        url: str,
+        api_key: str,
+        timeout_seconds: float = 20.0,
+    ) -> None:
+        self.base_url = url.rstrip("/")
+        self.timeout_seconds = timeout_seconds
+        self.session = requests.Session()
+        self.session.headers.update({
+            "X-Api-Key": api_key,
+            "Accept": "application/json",
+        })
+
+    def _request(self, method: str, path: str, **kwargs: Any) -> Any:
+        started = perf_counter()
+        try:
+            response = self.session.request(
+                method,
+                f"{self.base_url}/api/v1/{path.lstrip('/')}",
+                timeout=self.timeout_seconds,
+                **kwargs,
+            )
+            response.raise_for_status()
+        except requests.RequestException as exc:
+            raise LidarrError(
+                f"Lidarr request failed: {method} {path}: {exc}"
+            ) from exc
+        finally:
+            logger.debug(
+                "Lidarr API %s %s completed in %.2f sec",
+                method,
+                path,
+                perf_counter() - started,
+            )
+
+        if not response.content:
+            return None
+        return response.json()
+
+    def is_available(self) -> ComponentHealth:
+        try:
+            status = self.get_status()
+        except Exception as exc:
+            return ComponentHealth.unavailable(str(exc))
+        return ComponentHealth.available_health(
+            f"{status.app_name or 'Lidarr'} "
+            f"{status.version or 'unknown version'}"
+        )
+
+    def get_status(self) -> LidarrStatus:
+        payload = self._request("GET", "system/status")
+        if not isinstance(payload, dict):
+            raise LidarrError(
+                "Lidarr system status returned an unexpected response"
+            )
+        return LidarrStatus(
+            version=str(payload.get("version", "") or ""),
+            app_name=str(payload.get("appName", "") or ""),
+            instance_name=str(payload.get("instanceName", "") or ""),
+            startup_path=str(payload.get("startupPath", "") or ""),
+            os_name=str(
+                payload.get("osName", "")
+                or payload.get("osNameVersion", "")
+                or ""
+            ),
+        )
+
+    def get_artists(self) -> list[dict[str, Any]]:
+        return self._dict_list(self._request("GET", "artist"), "artist list")
+
+    def lookup_artist(self, artist_name: str) -> list[dict[str, Any]]:
+        return self._dict_list(
+            self._request(
+                "GET",
+                "artist/lookup",
+                params={"term": artist_name},
+            ),
+            "artist lookup",
+        )
+
+    def get_managed_artists(self) -> list[dict[str, Any]]:
+        return self._dict_list(
+            self._request("GET", "artist"),
+            "managed artist list",
+        )
+
+    def get_managed_artist_by_mbid(
+        self,
+        musicbrainz_artist_id: str,
+    ) -> dict[str, Any] | None:
+        mbid = str(musicbrainz_artist_id or "").strip()
+        if not mbid:
+            return None
+
+        artists = self._dict_list(
+            self._request(
+                "GET",
+                "artist",
+                params={"mbId": mbid},
+            ),
+            "managed artist lookup",
+        )
+        if not artists:
+            return None
+        if len(artists) > 1:
+            raise LidarrError(
+                "Lidarr returned multiple managed artists "
+                f"for MusicBrainz ID {mbid}"
+            )
+        return artists[0]
+
+    def get_artist_albums(self, artist_id: int) -> list[dict[str, Any]]:
+        return self._dict_list(
+            self._request(
+                "GET",
+                "album",
+                params={"artistId": int(artist_id)},
+            ),
+            "album list",
+        )
+
+    def get_artist_tracks(self, artist_id: int) -> list[dict[str, Any]]:
+        return self._dict_list(
+            self._request(
+                "GET",
+                "track",
+                params={"artistId": int(artist_id)},
+            ),
+            "track list",
+        )
+
+    def search_album(self, album_id: int) -> dict[str, Any]:
+        normalized_id = int(album_id)
+        if normalized_id <= 0:
+            raise LidarrError("Lidarr album ID must be greater than zero")
+
+        payload = self._request(
+            "POST",
+            "command",
+            json={
+                "name": "AlbumSearch",
+                "albumIds": [normalized_id],
+            },
+        )
+        if not isinstance(payload, dict):
+            raise LidarrError(
+                "Lidarr album search returned an unexpected response"
+            )
+        return payload
+
+    def get_command(self, command_id: int) -> LidarrCommandStatus:
+        normalized_id = int(command_id)
+        if normalized_id <= 0:
+            raise LidarrError("Lidarr command ID must be greater than zero")
+
+        payload = self._request("GET", f"command/{normalized_id}")
+        if not isinstance(payload, dict):
+            raise LidarrError(
+                "Lidarr command status returned an unexpected response"
+            )
+        return self._parse_command_status(payload, normalized_id)
+
+    def wait_for_command(
+        self,
+        command_id: int,
+        *,
+        timeout_seconds: float = 120.0,
+        poll_interval_seconds: float = 2.0,
+    ) -> LidarrCommandStatus:
+        if timeout_seconds < 0:
+            raise ValueError("timeout_seconds must be zero or greater")
+        if poll_interval_seconds <= 0:
+            raise ValueError("poll_interval_seconds must be greater than zero")
+
+        started = perf_counter()
+        while True:
+            status = self.get_command(command_id)
+            if status.completed:
+                return status
+            if perf_counter() - started >= timeout_seconds:
+                return status
+            sleep(poll_interval_seconds)
+
+    @staticmethod
+    def _parse_command_status(
+        payload: dict[str, Any],
+        fallback_id: int,
+    ) -> LidarrCommandStatus:
+        status = str(payload.get("status", "") or "")
+        status_key = status.casefold()
+        completed = status_key in {
+            "completed",
+            "failed",
+            "aborted",
+            "cancelled",
+            "canceled",
+        }
+        successful = status_key == "completed"
+        return LidarrCommandStatus(
+            command_id=_optional_int(payload.get("id")) or fallback_id,
+            name=str(payload.get("name", "") or ""),
+            status=status,
+            message=str(
+                payload.get("message", "")
+                or payload.get("errorMessage", "")
+                or ""
+            ),
+            completed=completed,
+            successful=successful,
+        )
+
+    @staticmethod
+    def _dict_list(payload: Any, description: str) -> list[dict[str, Any]]:
+        if payload is None:
+            return []
+        if not isinstance(payload, list):
+            raise LidarrError(
+                f"Lidarr {description} returned an unexpected response"
+            )
+        return [item for item in payload if isinstance(item, dict)]
+
+
+def _optional_int(value: Any) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None

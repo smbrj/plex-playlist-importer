@@ -1,0 +1,229 @@
+"""Lidarr diagnostics report construction and CSV output."""
+
+from __future__ import annotations
+
+import csv
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Iterable
+
+from plex_playlist.lidarr_acquisition import (
+    ARTIST_AMBIGUOUS,
+    ARTIST_NOT_MANAGED,
+    NO_ARTIST_CANDIDATE,
+    SEARCH_COMPLETED_FILE_AVAILABLE,
+    SEARCH_COMPLETED_NO_FILE,
+    SEARCH_FAILED,
+    SEARCH_NOT_REQUESTED,
+    SEARCH_QUEUED,
+    SEARCH_RECENTLY_REQUESTED,
+    SEARCH_RETRY_QUEUED,
+    SEARCH_STATUS_UNAVAILABLE,
+    TRACK_ALREADY_AVAILABLE,
+    TRACK_NOT_IN_LIDARR_METADATA,
+    LidarrAcquisitionService,
+    _album_title,
+    _artist_name,
+    _track_title,
+)
+
+from plex_playlist.lidarr_client import LidarrClient
+from plex_playlist.lidarr_search_history import LidarrSearchHistoryStore
+from plex_playlist.models import MatchResult
+
+
+@dataclass(frozen=True, slots=True)
+class LidarrDiagnosticRow:
+    sequence: int
+    requested_artist: str
+    requested_title: str
+    lidarr_status: str
+    matched_lidarr_artist: str
+    musicbrainz_artist_id: str
+    lidarr_artist_id: int | None
+    already_managed: bool
+    candidate_count: int
+    matched_album: str
+    matched_track: str
+    album_id: int | None
+    album_search_requested: bool
+    album_search_command_id: int | None
+    album_search_status: str
+    acquisition_status: str
+    track_id: int | None
+    track_found: bool
+    track_file_available: bool
+    recommended_action: str
+    notes: str
+
+
+def build_lidarr_diagnostics(
+    *,
+    results: Iterable[MatchResult],
+    client: LidarrClient,
+    search_missing_albums: bool = False,
+    wait_for_search_seconds: float = 0.0,
+    search_poll_interval_seconds: float = 2.0,
+    history_store: LidarrSearchHistoryStore | None = None,
+    remember_searches: bool = True,
+    retry_after_days: float = 7.0,
+) -> list[LidarrDiagnosticRow]:
+    service = LidarrAcquisitionService(
+        client=client,
+        history_store=history_store,
+        remember_searches=remember_searches,
+        retry_after_days=retry_after_days,
+    )
+    rows: list[LidarrDiagnosticRow] = []
+
+    for result in results:
+        if result.matched is not None:
+            continue
+        entry = _requested_entry(result)
+        resolution = service.resolve(
+            requested_artist=entry.artist,
+            requested_title=entry.title,
+        )
+
+        if resolution.managed_artist is None:
+            rows.append(_unmanaged_row(result, entry, resolution))
+            continue
+
+        decision = service.decide_search(
+            requested_artist=entry.artist,
+            resolution=resolution,
+            search_missing_albums=search_missing_albums,
+            wait_for_search_seconds=wait_for_search_seconds,
+            search_poll_interval_seconds=search_poll_interval_seconds,
+        )
+
+        effective_resolution = (
+            decision.refreshed_resolution
+            if decision.refreshed_resolution is not None
+            else resolution
+        )
+        track = effective_resolution.found_track
+        track_available = effective_resolution.track_available
+
+        rows.append(
+            LidarrDiagnosticRow(
+                sequence=entry.sequence,
+                requested_artist=entry.artist,
+                requested_title=entry.title,
+                lidarr_status=_human_track_status(
+                    track, track_available
+                ),
+                matched_lidarr_artist=_artist_name(
+                    effective_resolution.managed_artist
+                ),
+                musicbrainz_artist_id=str(
+                    effective_resolution.managed_artist.get(
+                        "foreignArtistId", ""
+                    ) or ""
+                ),
+                lidarr_artist_id=effective_resolution.lidarr_artist_id,
+                already_managed=True,
+                candidate_count=len(effective_resolution.candidates),
+                matched_album=_album_title(effective_resolution.found_album),
+                matched_track=_track_title(track),
+                album_id=effective_resolution.album_id,
+                album_search_requested=decision.requested,
+                album_search_command_id=decision.command_id,
+                album_search_status=decision.search_status,
+                acquisition_status=decision.acquisition_status,
+                track_id=_optional_int(track.get("id")) if track else None,
+                track_found=track is not None,
+                track_file_available=track_available,
+                recommended_action=decision.recommended_action,
+                notes=str(getattr(result, "reason", "") or ""),
+            )
+        )
+
+    return rows
+
+
+def write_lidarr_diagnostic_csv(
+    rows: Iterable[LidarrDiagnosticRow],
+    output_path: Path,
+) -> None:
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    headers = [
+        "Sequence", "Requested Artist", "Requested Title", "Lidarr Status",
+        "Matched Lidarr Artist", "MusicBrainz Artist ID", "Lidarr Artist ID",
+        "Already Managed", "Candidate Count", "Matched Album", "Matched Track",
+        "Album ID", "Track ID", "Track Found", "Track File Available",
+        "Album Search Requested", "Album Search Command ID",
+        "Album Search Status", "Acquisition Status", "Recommended Action",
+        "Plex Match Notes",
+    ]
+    with output_path.open("w", newline="", encoding="utf-8-sig") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(headers)
+        for row in rows:
+            writer.writerow([
+                row.sequence, row.requested_artist, row.requested_title,
+                row.lidarr_status, row.matched_lidarr_artist,
+                row.musicbrainz_artist_id,
+                row.lidarr_artist_id or "",
+                "Yes" if row.already_managed else "No",
+                row.candidate_count, row.matched_album, row.matched_track,
+                row.album_id or "", row.track_id or "",
+                "Yes" if row.track_found else "No",
+                "Yes" if row.track_file_available else "No",
+                "Yes" if row.album_search_requested else "No",
+                row.album_search_command_id or "",
+                row.album_search_status, row.acquisition_status,
+                row.recommended_action, row.notes,
+            ])
+
+
+def _unmanaged_row(result: Any, entry: Any, resolution: Any) -> LidarrDiagnosticRow:
+    candidates = resolution.candidates
+    best = resolution.best_candidate
+    if not candidates:
+        status, acquisition, action = (
+            "No candidate", NO_ARTIST_CANDIDATE,
+            "Review artist spelling or search Lidarr manually",
+        )
+    elif best is None:
+        status, acquisition, action = (
+            "Multiple candidates", ARTIST_AMBIGUOUS,
+            "Select the correct Lidarr artist manually",
+        )
+    else:
+        status, acquisition, action = (
+            "Lookup candidate found", ARTIST_NOT_MANAGED,
+            "Review candidate before adding to Lidarr",
+        )
+    return LidarrDiagnosticRow(
+        entry.sequence, entry.artist, entry.title, status,
+        _artist_name(best),
+        str(best.get("foreignArtistId", "") or "") if best else "",
+        None, False, len(candidates), "", "", None, False, None, "",
+        acquisition, None, False, False, action,
+        str(getattr(result, "reason", "") or ""),
+    )
+
+
+def _human_track_status(track: dict[str, Any] | None, available: bool) -> str:
+    if track is None:
+        return "Artist managed; track not found"
+    return "Track found with file" if available else "Track found; file missing"
+
+
+def _requested_entry(result: MatchResult) -> Any:
+    requested = getattr(result, "requested", None)
+    if requested is not None:
+        return requested
+    entry = getattr(result, "entry", None)
+    if entry is not None:
+        return entry
+    raise AttributeError("Match result has neither 'requested' nor 'entry'")
+
+
+def _optional_int(value: Any) -> int | None:
+    try:
+        return int(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None

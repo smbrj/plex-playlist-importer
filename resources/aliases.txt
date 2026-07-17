@@ -1,0 +1,27 @@
+# Plex Playlist Importer Artist Aliases
+# Managed by --import-aliases
+# Entries: 23
+
+Alan Parsons Project = The Alan Parsons Project
+Allman Brothers Band = The Allman Brothers Band
+Amazing Rhythm Aces = The Amazing Rhythm Aces
+Beatles = The Beatles
+Bob Marley and the Wailers = Bob Marley & The Wailers
+BTO = Bachman-Turner Overdrive
+CSNY = Crosby, Stills, Nash & Young
+Doobie Brothers = The Doobie Brothers
+Drew Holcomb, Ellie Holcomb & Drew Holcomb & The Neighbors = Drew Holcomb & the Neighbors
+Drifters = The Drifters
+ELO = Electric Light Orchestra
+Hall & Oates = Daryl Hall & John Oates
+Hollies = The Hollies
+Israel Kamakawiwo'ole = Israel Kamakawiwoʻole
+Jose Feliciano = José Feliciano
+Michael Murphey = Michael Martin Murphey
+Paul McCartney = Wings
+Rascals = The Rascals
+Rolling Stones = The Rolling Stones
+Seals = Seals & Crofts
+Stills = The Stills-Young Band
+Temptations = The Temptations
+The Tierney Sutton Band = Tierney Sutton Band

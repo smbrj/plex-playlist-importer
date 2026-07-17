@@ -1,0 +1,9 @@
+Metadata-Version: 2.4
+Name: plex-playlist-importer
+Version: 1.0.0
+Summary: Fuzzy playlist importer for Plex Media Server
+Requires-Python: >=3.11
+Requires-Dist: plexapi
+Requires-Dist: rapidfuzz
+Requires-Dist: requests
+Requires-Dist: tqdm

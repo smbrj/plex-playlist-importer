@@ -1,0 +1,51 @@
+# Core Plex API
+
+plexapi>=4.17.0
+
+# Fast fuzzy matching
+
+rapidfuzz>=3.9.0
+
+# Progress bars
+
+tqdm>=4.66.0
+
+# Rich console output
+
+rich>=13.9.0
+
+# HTML reporting
+
+jinja2>=3.1.4
+
+# CSV/DataFrame support
+
+pandas>=2.2.3
+
+# SQLite ORM (optional but recommended)
+
+sqlalchemy>=2.0.36
+
+# Command-line parsing enhancements
+
+typer>=0.15.1
+
+# Unit testing
+
+pytest>=8.3.4
+
+# Type checking
+
+mypy>=1.14.0
+
+# Formatting
+
+black>=24.10.0
+
+# Linting
+
+ruff>=0.8.4
+
+#  for lidarr
+
+requests>=2.32.0

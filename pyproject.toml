@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "plex-playlist-importer"
+version = "1.0.0"
+description = "Fuzzy playlist importer for Plex Media Server"
+requires-python = ">=3.11"
+
+dependencies = [
+    "plexapi",
+    "rapidfuzz",
+    "requests",
+    "tqdm",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["plex_playlist", "plex_playlist.*"]
+exclude = ["tests", "tests.*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
