@@ -123,3 +123,43 @@ def test_aggregate_exit_code() -> None:
     assert aggregate_profile_exit_code([XMProfileRunResult("a", 0), XMProfileRunResult("b", 0)]) == 0
     assert aggregate_profile_exit_code([XMProfileRunResult("a", 0), XMProfileRunResult("b", 2)]) == 2
     assert aggregate_profile_exit_code([XMProfileRunResult("a", 0), XMProfileRunResult("b", 4)]) == 1
+
+
+def test_profile_header_is_compact() -> None:
+    from plex_playlist.xmstation_profiles import (
+        XMStationProfile,
+        format_profile_header,
+    )
+
+    profile = XMStationProfile(
+        name="classic_rewind",
+        channel=25,
+        playlist=None,
+        history_hours=168,
+        max_tracks=100,
+        max_requests=8,
+        mode="update",
+        lidarr_check=True,
+        lidarr_search=False,
+        enabled=True,
+    )
+
+    assert format_profile_header(profile, 2, 3) == (
+        "Profile 2/3: classic_rewind (channel 25)"
+    )
+
+
+def test_profile_summary_contains_aggregate_counts() -> None:
+    from plex_playlist.xmstation_profiles import format_profile_summary
+
+    text = format_profile_summary([
+        XMProfileRunResult("success", 0),
+        XMProfileRunResult("warning", 2),
+        XMProfileRunResult("failure", 4),
+    ])
+
+    assert "XMPlaylist profile results" in text
+    assert "Profiles processed : 3" in text
+    assert "Successful         : 1" in text
+    assert "With warnings      : 1" in text
+    assert "Failed             : 1" in text

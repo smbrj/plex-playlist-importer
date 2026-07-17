@@ -17,7 +17,6 @@ import configparser
 import logging
 import sys
 from time import perf_counter
-from collections import Counter
 from pathlib import Path
 
 from plex_playlist.cache import LibraryCache
@@ -80,6 +79,8 @@ from plex_playlist.lidarr_reporting import (
     LidarrDiagnosticRow,
     build_lidarr_diagnostics,
     count_unique_unmatched_artists,
+    format_lidarr_summary,
+    summarize_lidarr_diagnostics,
     write_lidarr_diagnostic_csv,
 )
 
@@ -944,11 +945,13 @@ def run_lidarr_diagnostics(
     unique_artist_count = count_unique_unmatched_artists(
         session.results
     )
+    logger.info("Lidarr diagnostics")
+    logger.info("------------------")
+    logger.info("Unmatched tracks : %d", unmatched_count)
+    logger.info("Unique artists   : %d", unique_artist_count)
     logger.info(
-        "Lidarr diagnostics starting: %d unmatched entries; "
-        "Unique artists: %d",
-        unmatched_count,
-        unique_artist_count,
+        "Album searches  : %s",
+        "enabled" if search_missing_albums else "disabled",
     )
 
     progress_step = max(1, unmatched_count // 10)
@@ -998,22 +1001,11 @@ def run_lidarr_diagnostics(
 def log_lidarr_summary(
     rows: list[LidarrDiagnosticRow],
 ) -> None:
-    """Log stable machine-readable acquisition-state totals."""
+    """Log a compact, human-readable Lidarr result summary."""
 
-    counts = Counter(
-        row.acquisition_status or "UNCLASSIFIED"
-        for row in rows
-    )
-
-    logger.info(
-        "Lidarr acquisition summary: %s",
-        ", ".join(
-            f"{status}={count}"
-            for status, count in sorted(counts.items())
-        )
-        if counts
-        else "no Plex-unmatched entries",
-    )
+    summary = summarize_lidarr_diagnostics(rows)
+    for line in format_lidarr_summary(summary):
+        logger.info(line)
 
 
 

@@ -180,20 +180,75 @@ def build_profile_subprocess_command(*, script_path: Path, config_path: Path, pr
     return command
 
 
-def run_all_profiles(*, profiles: Sequence[XMStationProfile], script_path: Path, config_path: Path, profiles_path: Path, args) -> list[XMProfileRunResult]:
+def format_profile_header(
+    profile: XMStationProfile,
+    index: int,
+    total: int,
+) -> str:
+    return (
+        f"Profile {index}/{total}: {profile.name} "
+        f"(channel {profile.channel})"
+    )
+
+
+def format_profile_summary(
+    results: Sequence[XMProfileRunResult],
+) -> str:
+    lines = ["XMPlaylist profile results", "--------------------------"]
+    for result in results:
+        lines.append(
+            f"{result.name:<24} {result.status:<24} "
+            f"exit={result.returncode}"
+        )
+    lines.extend([
+        "",
+        f"Profiles processed : {len(results)}",
+        f"Successful         : {sum(r.returncode == 0 for r in results)}",
+        f"With warnings      : {sum(r.returncode == 2 for r in results)}",
+        (
+            "Failed             : "
+            f"{sum(r.returncode not in (0, 2) for r in results)}"
+        ),
+    ])
+    return "\n".join(lines)
+
+
+def run_all_profiles(
+    *,
+    profiles: Sequence[XMStationProfile],
+    script_path: Path,
+    config_path: Path,
+    profiles_path: Path,
+    args,
+) -> list[XMProfileRunResult]:
     results: list[XMProfileRunResult] = []
     enabled = [profile for profile in profiles if profile.enabled]
     if not enabled:
-        raise XMStationProfileError("No enabled XMPlaylist station profiles were found")
+        raise XMStationProfileError(
+            "No enabled XMPlaylist station profiles were found"
+        )
+    total = len(enabled)
     for index, profile in enumerate(enabled, start=1):
-        print(f"\n=== XMPlaylist profile {index}/{len(enabled)}: {profile.name} (channel {profile.channel}) ===", flush=True)
-        command = build_profile_subprocess_command(script_path=script_path, config_path=config_path, profiles_path=profiles_path, profile=profile, args=args)
+        print("", flush=True)
+        print("=" * 60, flush=True)
+        print(format_profile_header(profile, index, total), flush=True)
+        print("=" * 60, flush=True)
+        command = build_profile_subprocess_command(
+            script_path=script_path,
+            config_path=config_path,
+            profiles_path=profiles_path,
+            profile=profile,
+            args=args,
+        )
         completed = subprocess.run(command, check=False)
-        results.append(XMProfileRunResult(name=profile.name, returncode=completed.returncode))
-    print("\nXMPlaylist profile summary:")
-    for result in results:
-        print(f"  {result.name:<24} {result.status:<24} exit={result.returncode}")
-    print(f"\nProfiles processed : {len(results)}\nSuccessful         : {sum(r.returncode == 0 for r in results)}\nWith warnings      : {sum(r.returncode == 2 for r in results)}\nFailed             : {sum(r.returncode not in (0, 2) for r in results)}")
+        results.append(
+            XMProfileRunResult(
+                name=profile.name,
+                returncode=completed.returncode,
+            )
+        )
+    print("", flush=True)
+    print(format_profile_summary(results), flush=True)
     return results
 
 

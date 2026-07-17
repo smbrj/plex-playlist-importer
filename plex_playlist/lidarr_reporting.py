@@ -58,6 +58,96 @@ class LidarrDiagnosticRow:
     notes: str
 
 
+@dataclass(frozen=True, slots=True)
+class LidarrDiagnosticSummary:
+    tracks_checked: int
+    unique_artists: int
+    already_available: int
+    newly_available: int
+    searches_queued: int
+    searches_suppressed: int
+    no_lidarr_match: int
+    request_failures: int
+    other: int
+
+
+def summarize_lidarr_diagnostics(
+    rows: Iterable[LidarrDiagnosticRow],
+) -> LidarrDiagnosticSummary:
+    materialized = list(rows)
+    counts: dict[str, int] = {}
+    for row in materialized:
+        status = row.acquisition_status or "UNCLASSIFIED"
+        counts[status] = counts.get(status, 0) + 1
+
+    unique_artists = len({
+        " ".join(row.requested_artist.casefold().split())
+        for row in materialized
+        if row.requested_artist.strip()
+    })
+    already_available = counts.get(TRACK_ALREADY_AVAILABLE, 0)
+    newly_available = counts.get(SEARCH_COMPLETED_FILE_AVAILABLE, 0)
+    searches_queued = (
+        counts.get(SEARCH_QUEUED, 0)
+        + counts.get(SEARCH_RETRY_QUEUED, 0)
+    )
+    searches_suppressed = counts.get(SEARCH_RECENTLY_REQUESTED, 0)
+    no_lidarr_match = sum(
+        counts.get(status, 0)
+        for status in (
+            NO_ARTIST_CANDIDATE,
+            ARTIST_AMBIGUOUS,
+            ARTIST_NOT_MANAGED,
+            TRACK_NOT_IN_LIDARR_METADATA,
+        )
+    )
+    request_failures = sum(
+        counts.get(status, 0)
+        for status in (
+            "REQUEST_FAILED",
+            SEARCH_FAILED,
+            SEARCH_STATUS_UNAVAILABLE,
+        )
+    )
+    classified = (
+        already_available
+        + newly_available
+        + searches_queued
+        + searches_suppressed
+        + no_lidarr_match
+        + request_failures
+    )
+    return LidarrDiagnosticSummary(
+        tracks_checked=len(materialized),
+        unique_artists=unique_artists,
+        already_available=already_available,
+        newly_available=newly_available,
+        searches_queued=searches_queued,
+        searches_suppressed=searches_suppressed,
+        no_lidarr_match=no_lidarr_match,
+        request_failures=request_failures,
+        other=max(0, len(materialized) - classified),
+    )
+
+
+def format_lidarr_summary(summary: LidarrDiagnosticSummary) -> list[str]:
+    lines = [
+        "Lidarr results",
+        "--------------",
+        f"Tracks checked       : {summary.tracks_checked}",
+        f"Unique artists       : {summary.unique_artists}",
+        f"Already available    : {summary.already_available}",
+        f"Newly available      : {summary.newly_available}",
+        f"Searches queued      : {summary.searches_queued}",
+        f"Searches suppressed  : {summary.searches_suppressed}",
+        f"No Lidarr match      : {summary.no_lidarr_match}",
+        f"Request failures     : {summary.request_failures}",
+    ]
+    if summary.other:
+        lines.append(f"Other states         : {summary.other}")
+    return lines
+
+
 def build_lidarr_diagnostics(
     *,
     results: Iterable[MatchResult],
@@ -105,31 +195,10 @@ def build_lidarr_diagnostics(
                 search_poll_interval_seconds=search_poll_interval_seconds,
             )
 
-            refreshed_track = getattr(
+            track, track_available = _decision_track_state(
                 decision,
-                "refreshed_track",
-                None,
+                resolution,
             )
-            track = (
-                refreshed_track
-                if refreshed_track is not None
-                else resolution.found_track
-            )
-
-            refreshed_track_available = getattr(
-                decision,
-                "refreshed_track_available",
-                None,
-            )
-            if refreshed_track_available is not None:
-                track_available = refreshed_track_available
-            elif (
-                decision.acquisition_status
-                == "SEARCH_COMPLETED_FILE_AVAILABLE"
-            ):
-                track_available = True
-            else:
-                track_available = resolution.track_available
 
             rows.append(
                 LidarrDiagnosticRow(
@@ -223,6 +292,42 @@ def write_lidarr_diagnostic_csv(
                 row.album_search_status, row.acquisition_status,
                 row.recommended_action, row.notes,
             ])
+
+
+def _decision_track_state(
+    decision: Any,
+    resolution: Any,
+) -> tuple[dict[str, Any] | None, bool]:
+    """Return the post-search track state across decision versions."""
+
+    refreshed_resolution = getattr(
+        decision,
+        "refreshed_resolution",
+        None,
+    )
+    if refreshed_resolution is not None:
+        return (
+            refreshed_resolution.found_track,
+            bool(refreshed_resolution.track_available),
+        )
+
+    # Compatibility with short-lived decision objects that exposed the
+    # refreshed values directly instead of through refreshed_resolution.
+    refreshed_track = getattr(decision, "refreshed_track", None)
+    refreshed_available = getattr(
+        decision,
+        "refreshed_track_available",
+        None,
+    )
+    track = (
+        refreshed_track
+        if refreshed_track is not None
+        else resolution.found_track
+    )
+    if refreshed_available is not None:
+        return track, bool(refreshed_available)
+
+    return track, bool(resolution.track_available)
 
 
 def _request_failed_row(
