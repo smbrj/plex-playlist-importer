@@ -13,7 +13,7 @@
 | Architecture Documents | 4 |
 | Technical Reference Documents | 16 |
 | Reference Aids | 2 |
-| Latest Snapshot | Snapshot-013 |
+| Latest Snapshot | Snapshot-017 |
 
 # Technical Reference Documents
 
@@ -33,7 +33,7 @@ All currently planned technical reference documents and reference aids are appro
 ## Next
 
 - Cross-reference audit
-- Terminology audit
+- Terminology audit — Complete; corrections applied in Snapshot-015
 - Broken-link audit
 - Documentation Version 1.0 baseline
 - Final documentation snapshot
@@ -67,3 +67,32 @@ Whenever documentation changes:
 - Commit documentation changes with corresponding software changes whenever practical.
 
 This document is the authoritative inventory of project documentation.
+
+
+## Documentation Consolidation Status
+
+- Cross-reference audit: Complete.
+- Cross-reference corrections: Complete.
+- Terminology audit: Complete.
+- Terminology corrections: Complete.
+- Broken-link/filesystem audit — Complete; filesystem corrections applied in Snapshot-016: In progress.
+- Documentation Version 1.0 baseline: Complete — Snapshot-017.
+
+
+---
+
+## Documentation Version 1.0 Baseline
+
+**Status:** Complete  
+**Baseline Snapshot:** Snapshot-017  
+**Baseline Date:** 2026-07-22
+
+Snapshot-017 establishes the first consolidated documentation baseline after completion of:
+
+- Technical reference drafting and approval.
+- Glossary approval.
+- Cross-reference audit and corrections.
+- Terminology audit and corrections.
+- Broken-link/filesystem audit and corrections.
+
+Future documentation changes should be made against this baseline and included in subsequent documentation snapshots.

@@ -171,7 +171,7 @@ The subsystem may consider both track artist and album artist because source and
 
 Alias mappings from `resources/aliases.txt` are loaded through `resources.py` and supplied through `MatchingConfig`. They expand candidate lookup and canonical artist comparison.
 
-See `docs/subsystems/aliases.md` and ADR-005.
+See `docs/aliases.md` and ADR-005.
 
 ## 8. Weighted Matching
 

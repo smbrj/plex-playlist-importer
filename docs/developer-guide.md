@@ -824,10 +824,10 @@ The exact structure may evolve as the project grows, but the general organizatio
   |-- config.ini
   |-- requirements.txt
   |-- README.md
-  |-- DEVELOPER_GUIDE.md
+  |-- docs/developer-guide.md
   |-- CONTRIBUTING.md
   |-- CHANGELOG.md
-  |-- PROJECT_HISTORY.md
+  |-- docs/PROJECT_HISTORY.md
   |-- LICENSE
   |-- NOTICE
   |
@@ -855,18 +855,18 @@ The exact structure may evolve as the project grows, but the general organizatio
   |
   `-- docs/
       |-- documentation-standards.md
-      |-- architecture.md
-      |-- application-flow.md
+      |-- subsystem-overview.md
+      |-- runtime.md
 
 
                                                       15
 
        |-- configuration.md
-       |-- playlist-formats.md
+       |-- parser.md
        |-- testing.md
-       |-- logging.md
+       |-- runtime.md
        |
-       |-- subsystems/
+       |-- 
        |
        `-- adr/
 
@@ -2184,7 +2184,7 @@ The application currently supports:
 Detailed end-user specifications and examples belong in:
 
 
-docs/playlist-formats.md
+docs/parser.md
 
 
 The Developer Guide focuses on how those formats participate in the application architecture.
@@ -2309,7 +2309,7 @@ input.
 Detailed supported M3U behavior should be documented in:
 
 
-docs/playlist-formats.md
+docs/parser.md
 
 
 8.6 Input Validation
@@ -2441,7 +2441,7 @@ When a new format is added:
     2. Add parser tests.
     3. Add invalid-input tests.
     4. Confirm order preservation.
-    5. Update docs/playlist-formats.md .
+    5. Update docs/parser.md .
     6. Update the README Supported Input Formats section.
     7. Update the changelog.
 
@@ -3422,13 +3422,13 @@ Detailed matching algorithms, normalization rules, scoring implementation, and a
 documented separately in:
 
 
-docs/subsystems/matching.md
+docs/matching.md
 
 
 and:
 
 
-docs/subsystems/aliases.md
+docs/aliases.md
 
 
                                                      31
@@ -3534,7 +3534,7 @@ For example, the purpose of an alias is to express:
 The detailed file syntax and maintenance procedures should be documented in:
 
 
-docs/subsystems/aliases.md
+docs/aliases.md
 
 
 11.3 Alias Normalization
@@ -3757,7 +3757,7 @@ This keeps exceptions visible, maintainable, and auditable.
 Detailed alias formats, commands, analysis procedures, and persistence behavior belong in:
 
 
-docs/subsystems/aliases.md
+docs/aliases.md
 
 
 12. Plex Integration
@@ -4068,7 +4068,7 @@ a second media-library authority.
 Detailed Plex client behavior should be documented in:
 
 
-docs/subsystems/plex.md
+docs/plex.md
 
 
 13. Lidarr Integration
@@ -4483,7 +4483,7 @@ Plex.
 Detailed Lidarr workflows, diagnostic fields, retry configuration, and status definitions belong in:
 
 
-docs/subsystems/lidarr.md
+docs/lidarr.md
 
 
 14. XMPlaylist Integration
@@ -4652,7 +4652,7 @@ A configured name can override that default.
 The exact current file format and supported fields should be documented in:
 
 
-docs/subsystems/xmplaylist.md
+docs/xmplaylist.md
 
 
 or the appropriate user configuration reference.
@@ -5032,7 +5032,7 @@ window cannot or should not be processed at once.
 Detailed API behavior, station-preference syntax, state schema, pagination, and CLI options belong in:
 
 
-docs/subsystems/xmplaylist.md
+docs/xmplaylist.md
 
 
 15. Persistent Application State
@@ -6623,7 +6623,7 @@ It should not be so verbose that important events disappear inside routine noise
 Detailed logging behavior and troubleshooting guidance belong in:
 
 
-docs/logging.md
+docs/runtime.md
 
 
 19. Runtime Health and Resiliency
@@ -8038,7 +8038,7 @@ Depending on the change, documentation updates may include:
      • README.md
      • Developer Guide
      • docs/configuration.md
-     • docs/playlist-formats.md
+     • docs/parser.md
      • Subsystem documentation
      • ADR
      • Changelog
@@ -8422,7 +8422,7 @@ A conceptual project structure is:
   +-- LICENSE
   +-- NOTICE
   +-- CHANGELOG.md
-+-- PROJECT_HISTORY.md
++-- docs/PROJECT_HISTORY.md
 +-- CONTRIBUTING.md
   |
   +-- plex_playlist/
@@ -8465,15 +8465,15 @@ A conceptual project structure is:
       +-- developer-guide.md
       +-- documentation-standards.md
       +-- configuration.md
-      +-- playlist-formats.md
+      +-- parser.md
       +-- testing.md
-      +-- logging.md
+      +-- runtime.md
             |
       +-- adr/
       |   +-- ADR-001-...
       |   +-- ADR-002-...
       |
-      +-- subsystems/
+      +-- 
           +-- matching.md
           +-- aliases.md
           +-- plex.md
@@ -8762,7 +8762,7 @@ superseded.
 A later ADR can document the replacement decision.
 
 
-24.10 docs/subsystems/
+24.10 docs/
 Subsystem documentation contains implementation-level information that would make the Developer
 Guide too detailed.
 
@@ -9068,7 +9068,7 @@ Examples:
 
   New Playlist Format
       -> README
-      -> playlist-formats.md
+      -> parser.md
       -> parser tests
       -> changelog
 
@@ -9389,7 +9389,7 @@ The configuration reference defines the actual settings.
 
 
 26.4 Playlist Format Reference
-docs/playlist-formats.md
+docs/parser.md
 
 
 This document defines the supported playlist input formats.
@@ -9420,7 +9420,7 @@ README Supported Input Formats section.
 
 
 26.5 Architecture
-docs/architecture.md
+docs/subsystem-overview.md
 
 
 The architecture document provides a focused view of the system's high-level components and boundaries.
@@ -9443,7 +9443,7 @@ view without reading the entire Developer Guide.
 
 
 26.6 Application Flow
-docs/application-flow.md
+docs/runtime.md
 
 
 The application-flow document describes end-to-end execution behavior.
@@ -9491,7 +9491,7 @@ The testing document provides the operational test reference.
 
 ## 26.8 Logging
 
-`docs/logging.md`
+`docs/runtime.md`
 
 The logging document provides detailed operational guidance for interpreting
 application logs.
@@ -9525,7 +9525,7 @@ It should include:
 
   ## 26.9 Subsystem Documentation
 
-  `docs/subsystems/`
+  `docs/`
 
   Subsystem documentation provides deeper implementation detail for major
   components.
@@ -9533,7 +9533,7 @@ It should include:
   Expected subsystem documents may include:
 
   ```text id="tj3p7l"
-  docs/subsystems/
+  docs/
       matching.md
       aliases.md
       cache.md
@@ -9628,7 +9628,7 @@ every change.
 ## 26.12 Project History
 
 
-`PROJECT_HISTORY.md`
+`docs/PROJECT_HISTORY.md`
 
 Project History preserves the evolution of Plex Playlist Importer.
 
@@ -9709,17 +9709,17 @@ How do I configure it?
     -> docs/configuration.md
 
 What playlist formats are supported?
-    -> docs/playlist-formats.md
+    -> docs/parser.md
 
 How does the system work?
     -> docs/developer-guide.md
 
 
 What are the major components?
-    -> docs/architecture.md
+    -> docs/subsystem-overview.md
 
 What happens during one execution?
-    -> docs/application-flow.md
+    -> docs/runtime.md
 
 How do I test it?
     -> docs/testing.md
@@ -9729,10 +9729,10 @@ How do I interpret logs?
 
                                        8
 
-       -> docs/logging.md
+       -> docs/runtime.md
 
   How does one subsystem work internally?
-      -> docs/subsystems/
+      -> docs/
 
 
   Why was a significant decision made?
@@ -9742,7 +9742,7 @@ How do I interpret logs?
        -> CHANGELOG.md
 
   How did the project evolve?
-      -> PROJECT_HISTORY.md
+      -> docs/PROJECT_HISTORY.md
 
   How do I contribute?
       -> CONTRIBUTING.md

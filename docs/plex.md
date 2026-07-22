@@ -226,7 +226,7 @@ When troubleshooting with `--no-cache`, expect significantly longer processing t
 
 During development with a library of approximately 55,000 tracks, direct Plex operation was observed to take roughly **10 minutes or more** in some runs. This is an operational observation rather than a guaranteed benchmark.
 
-See `docs/subsystems/cache.md` for additional operational guidance.
+See `docs/cache.md` for additional operational guidance.
 
 ## 20. Security Considerations
 

@@ -305,11 +305,11 @@ Detailed information should move into dedicated documents.
 Examples include:
 
 * `docs/configuration.md`
-* `docs/playlist-formats.md`
+* `docs/parser.md`
 * `docs/testing.md`
-* `docs/logging.md`
-* `docs/architecture.md`
-* `docs/application-flow.md`
+* `docs/runtime.md`
+* `docs/subsystem-overview.md`
+* `docs/runtime.md`
 
 The README should point readers toward these documents when additional detail is appropriate.
 
@@ -343,7 +343,7 @@ Information likely to expand or change independently should have a dedicated ref
 
 For example, supported playlist formats are documented in:
 
-`docs/playlist-formats.md`
+`docs/parser.md`
 
 Adding a new input format should primarily require updating that document rather than expanding the README with parsing details.
 
@@ -399,17 +399,17 @@ The project documentation is organized by audience and purpose.
 | `DEVELOPER_GUIDE.md`              | Developers                     | Explain architecture, implementation, and development practices             |
 | `CONTRIBUTING.md`                 | Contributors                   | Explain contribution expectations and development workflow                  |
 | `CHANGELOG.md`                    | Users and developers           | Record release-level changes                                                |
-| `PROJECT_HISTORY.md`              | Users, developers, maintainers | Preserve project origins, foundational decisions, milestones, and evolution |
+| `docs/PROJECT_HISTORY.md`              | Users, developers, maintainers | Preserve project origins, foundational decisions, milestones, and evolution |
 | `LICENSE`                         | Everyone                       | Define the project's software license                                       |
 | `NOTICE`                          | Everyone                       | Maintain Apache 2.0 attribution and notice information                      |
 | `docs/documentation-standards.md` | Documentation authors          | Define documentation principles and conventions                             |
 | `docs/configuration.md`           | Users and operators            | Provide complete configuration reference material                           |
-| `docs/playlist-formats.md`        | Users                          | Document supported playlist formats and required fields                     |
-| `docs/architecture.md`            | Developers                     | Describe high-level system architecture                                     |
-| `docs/application-flow.md`        | Developers and operators       | Explain end-to-end application processing                                   |
+| `docs/parser.md`        | Users                          | Document supported playlist formats and required fields                     |
+| `docs/subsystem-overview.md`            | Developers                     | Describe high-level system architecture                                     |
+| `docs/runtime.md`        | Developers and operators       | Explain end-to-end application processing                                   |
 | `docs/testing.md`                 | Developers and contributors    | Document testing strategy and regression practices                          |
-| `docs/logging.md`                 | Operators and developers       | Explain logging, diagnostics, and troubleshooting                           |
-| `docs/subsystems/`                | Developers                     | Provide detailed subsystem documentation                                    |
+| `docs/runtime.md`                 | Operators and developers       | Explain logging, diagnostics, and troubleshooting                           |
+| `docs/`                | Developers                     | Provide detailed subsystem documentation                                    |
 | `docs/adr/`                       | Developers and maintainers     | Preserve significant architectural and project decisions                    |
 
 Additional documents may be added when they have a clearly defined audience and purpose.
@@ -601,7 +601,7 @@ This section is required even when reconsideration is considered unlikely.
 
 ## 11. Project History and Foundational Decisions
 
-`PROJECT_HISTORY.md` preserves the story of the project rather than the implementation details of the software.
+`docs/PROJECT_HISTORY.md` preserves the story of the project rather than the implementation details of the software.
 
 Its purpose is to answer:
 

@@ -453,14 +453,14 @@ The project documentation is organized by audience and purpose.
 | `DEVELOPER_GUIDE.md`              | Architecture, implementation, and development practices                |
 | `CONTRIBUTING.md`                 | Contribution guidelines and development workflow                       |
 | `CHANGELOG.md`                    | Release history                                                        |
-| `PROJECT_HISTORY.md`              | Project origins, foundational decisions, and evolution                 |
+| `docs/PROJECT_HISTORY.md`              | Project origins, foundational decisions, and evolution                 |
 | `docs/documentation-standards.md` | Documentation philosophy, standards, and conventions                   |
 | `docs/configuration.md`           | Configuration reference                                                |
-| `docs/architecture.md`            | System architecture                                                    |
-| `docs/application-flow.md`        | End-to-end application processing flow                                 |
+| `docs/subsystem-overview.md`            | System architecture                                                    |
+| `docs/runtime.md`        | End-to-end application processing flow                                 |
 | `docs/testing.md`                 | Testing strategy and regression testing                                |
-| `docs/logging.md`                 | Logging, diagnostics, and operational troubleshooting                  |
-| `docs/subsystems/`                | Detailed subsystem documentation                                       |
+| `docs/runtime.md`                 | Logging, diagnostics, and operational troubleshooting                  |
+| `docs/`                | Detailed subsystem documentation                                       |
 | `docs/adr/`                       | Architecture Decision Records explaining significant project decisions |
 
 The README introduces concepts. The supporting documentation explains them in greater detail.
