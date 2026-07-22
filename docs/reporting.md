@@ -401,9 +401,7 @@ alias_audit.csv
 
 # 27. Report Path Configuration
 
-Reporting paths may come from application configuration or execution-specific command-line options depending on the workflow.
-
-Persistent report-location preferences belong in configuration; execution-specific output overrides belong on the command line.
+Persistent report-location defaults are defined in `[reports]` using `directory`, `match`, `unmatched`, and `lidarr`. The CLI options `--report`, `--unmatched`, and `--lidarr-report` remain execution-specific overrides. Relative configured paths are resolved from the selected `config.ini`.
 
 ---
 
@@ -425,9 +423,7 @@ Current command-line report/output controls include:
 
 # 29. Output Directory Handling
 
-Report writers should ensure that required parent directories exist where the current implementation supports this behavior.
-
-Where directory-creation behavior differs among report writers, it should be standardized during technical cleanup.
+Core match and unmatched CSV writers create required parent directories before opening their output files. Other report writers should follow the same rule when they own their output path.
 
 ---
 
@@ -566,13 +562,11 @@ Identify every current report writer and confirm direct test coverage.
 
 ## 43.2 Verify Report Directory Creation
 
-Confirm that every report writer consistently creates required parent directories or fails with a clear diagnostic.
+Core match and unmatched writers were standardized during the post-documentation Configuration Audit. Continue extending direct coverage to the remaining specialized report writers.
 
 ## 43.3 Verify Current [reports] Configuration Usage
 
-Compare released `[reports]` settings against the actual orchestrator.
-
-Unused or historical report settings should be implemented, deprecated, or removed.
+Completed during the post-documentation Configuration Audit. The main match, unmatched, and Lidarr report defaults are now configuration-driven, with CLI overrides retained.
 
 ## 43.4 Review HTML-Related Configuration and Dependencies
 

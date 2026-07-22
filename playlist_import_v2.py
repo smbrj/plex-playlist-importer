@@ -62,6 +62,7 @@ from plex_playlist.alias_intelligence import (
     suggest_aliases_csv,
 )
 from plex_playlist.lidarr_client import LidarrClient
+from plex_playlist.lidarr_search_history import LidarrSearchHistoryStore
 from plex_playlist.xmplaylist_client import XMPlaylistClient
 from plex_playlist.xmplaylist_source import ingest_station
 from plex_playlist.xmstation_profiles import (
@@ -94,11 +95,83 @@ logger = logging.getLogger("plex_playlist")
 # Config
 # ============================================================
 
+SUPPORTED_CONFIG_VERSION = 3
+
+
 def load_config(path: Path) -> configparser.ConfigParser:
+    """Load and validate the application configuration file."""
 
     cfg = configparser.ConfigParser()
-    cfg.read(path)
+    loaded = cfg.read(path)
+    if not loaded:
+        raise RuntimeError(f"Configuration file not found: {path}")
+
+    version = cfg.getint(
+        "application",
+        "config_version",
+        fallback=0,
+    )
+    if version != SUPPORTED_CONFIG_VERSION:
+        raise RuntimeError(
+            "Unsupported configuration version "
+            f"{version}; expected {SUPPORTED_CONFIG_VERSION}."
+        )
+
     return cfg
+
+
+def resolve_config_path(config_path: Path, value: str | Path) -> Path:
+    """Resolve a configured path relative to the config file."""
+
+    path = Path(value)
+    if path.is_absolute():
+        return path
+    return config_path.resolve().parent / path
+
+
+def configure_logging(
+    cfg: configparser.ConfigParser,
+    config_path: Path,
+) -> logging.Logger:
+    """Initialize logging from the [logging] configuration section."""
+
+    level = cfg.get("logging", "level", fallback="INFO").strip() or "INFO"
+    directory = resolve_config_path(
+        config_path,
+        cfg.get("logging", "directory", fallback="logs"),
+    )
+    filename = cfg.get(
+        "logging",
+        "filename",
+        fallback="playlist_import.log",
+    ).strip() or "playlist_import.log"
+    return setup_logging(
+        level=level,
+        directory=directory,
+        filename=filename,
+    )
+
+
+def resolve_report_path(
+    cfg: configparser.ConfigParser,
+    config_path: Path,
+    *,
+    key: str,
+    fallback_filename: str,
+) -> Path:
+    """Resolve one configured report path using [reports] directory."""
+
+    configured = cfg.get("reports", key, fallback=fallback_filename).strip()
+    value = Path(configured or fallback_filename)
+    if value.is_absolute():
+        return value
+
+    directory = Path(
+        cfg.get("reports", "directory", fallback="reports").strip()
+        or "reports"
+    )
+    combined = value if value.parent != Path('.') else directory / value
+    return resolve_config_path(config_path, combined)
 
 
 def build_matching_config(
@@ -155,8 +228,8 @@ def build_matching_config(
         title_weight=match_cfg.getfloat("title_weight", 0.45),
         combined_weight=match_cfg.getfloat("combined_weight", 0.15),
         preferred_versions=preferred_versions,
-        min_title_score=match_cfg.getfloat("min_title_score", 80),
-        fallback_title_score=match_cfg.getfloat("fallback_title_score", 95),
+        min_title_score=match_cfg.getfloat("min_title_score", 95),
+        fallback_title_score=match_cfg.getfloat("fallback_title_score", 80),
         debug=logging_cfg.getboolean("debug", False),
         trace=logging_cfg.getboolean("trace", False),
         artist_aliases=artist_aliases,
@@ -616,15 +689,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--unmatched",
         type=Path,
-        default=Path("unmatched.csv"),
-        help="Unmatched-track CSV output path",
+        default=None,
+        help="Unmatched-track CSV output path (overrides [reports] unmatched)",
     )
 
     parser.add_argument(
         "--report",
         type=Path,
-        default=Path("playlist_report.csv"),
-        help="Full match-report CSV output path",
+        default=None,
+        help="Full match-report CSV output path (overrides [reports] match)",
     )
 
     parser.add_argument(
@@ -652,8 +725,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--lidarr-report",
         type=Path,
-        default=Path("lidarr_unmatched_report.csv"),
-        help="Lidarr diagnostic CSV output path",
+        default=None,
+        help="Lidarr diagnostic CSV output path (overrides [reports] lidarr)",
     )
 
     parser.add_argument(
@@ -867,6 +940,7 @@ def run_lidarr_diagnostics(
     output_path: Path,
     search_missing_albums: bool = False,
     client: LidarrClient | None = None,
+    config_path: Path = Path("config.ini"),
 ) -> list[LidarrDiagnosticRow]:
     """
     Check Plex-unmatched entries against Lidarr and write a CSV report.
@@ -972,10 +1046,42 @@ def run_lidarr_diagnostics(
                 total,
             )
 
+    remember_searches = cfg.getboolean(
+        "lidarr",
+        "remember_failed_searches",
+        fallback=True,
+    )
+    retry_after_days = cfg.getfloat(
+        "lidarr",
+        "retry_search_after_days",
+        fallback=7.0,
+    )
+    if retry_after_days < 0:
+        raise RuntimeError(
+            "Lidarr retry_search_after_days must be zero or greater."
+        )
+
+    history_path = resolve_config_path(
+        config_path,
+        cfg.get(
+            "lidarr",
+            "search_history_database",
+            fallback="cache/lidarr_search_history.db",
+        ),
+    )
+    history_store = (
+        LidarrSearchHistoryStore(history_path)
+        if remember_searches
+        else None
+    )
+
     rows = build_lidarr_diagnostics(
         results=session.results,
         client=client,
         search_missing_albums=search_missing_albums,
+        history_store=history_store,
+        remember_searches=remember_searches,
+        retry_after_days=retry_after_days,
         progress_callback=log_progress,
     )
 
@@ -1338,13 +1444,27 @@ def main() -> None:
         except XMStationProfileError as exc:
             parser.error(str(exc))
 
-    #
-    # setup logging
-    #
-    logger = setup_logging()
-
-
     cfg = load_config(args.config)
+
+    #
+    # setup logging from config
+    #
+    logger = configure_logging(cfg, args.config)
+
+    # Apply persistent report defaults unless the CLI explicitly overrides them.
+    if args.unmatched is None:
+        args.unmatched = resolve_report_path(
+            cfg, args.config, key="unmatched", fallback_filename="unmatched.csv"
+        )
+    if args.report is None:
+        args.report = resolve_report_path(
+            cfg, args.config, key="match", fallback_filename="playlist_report.csv"
+        )
+    if args.lidarr_report is None:
+        args.lidarr_report = resolve_report_path(
+            cfg, args.config, key="lidarr", fallback_filename="lidarr_unmatched_report.csv"
+        )
+
     run_status = RunStatus()
     include_file_paths = cfg.getboolean(
         "reports",
@@ -1490,6 +1610,7 @@ def main() -> None:
                 output_path=args.lidarr_report,
                 search_missing_albums=args.lidarr_search,
                 client=lidarr_client,
+                config_path=args.config,
             )
             run_status.lidarr = ComponentHealth.available_health(
                 "completed"

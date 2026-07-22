@@ -1380,7 +1380,6 @@ Possible considerations include:
       • Whether it contains tracks.
       • The last successful refresh time.
       • Configured maximum age.
-      • Whether refresh-on-start is enabled.
       • Whether the user explicitly requested a refresh.
 
 If a refresh is required and Plex is available, the application retrieves the configured music library and

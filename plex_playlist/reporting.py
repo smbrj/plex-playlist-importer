@@ -43,6 +43,8 @@ def write_unmatched_csv(
     Write unmatched playlist entries to CSV.
     """
 
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
 
@@ -127,6 +129,8 @@ def write_match_report_csv(
     Write a full match report for every playlist entry.
     """
 
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
 

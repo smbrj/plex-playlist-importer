@@ -6,19 +6,22 @@ from pathlib import Path
 from datetime import datetime
 
 
-LOG_DIR = Path("logs")
-RUN_DIR = LOG_DIR / "runs"
-
-
 def setup_logging(
     level: str = "INFO",
+    directory: Path | str = Path("logs"),
+    filename: str = "playlist_import.log",
 ) -> logging.Logger:
+    """Configure console, rotating, debug, and per-run logging."""
 
-    LOG_DIR.mkdir(exist_ok=True)
-    RUN_DIR.mkdir(exist_ok=True)
+    log_dir = Path(directory)
+    run_dir = log_dir / "runs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    run_dir.mkdir(parents=True, exist_ok=True)
 
     logger = logging.getLogger("plex_playlist")
 
+    # setup_logging may be called more than once in tests or embedded use.
+    # Existing handlers mean the logger is already configured.
     if logger.handlers:
         return logger
 
@@ -29,55 +32,30 @@ def setup_logging(
         datefmt="%Y-%m-%d %H:%M:%S",
     )
 
-    #
-    # Console
-    #
-
     console = logging.StreamHandler()
     console.setLevel(level.upper())
     console.setFormatter(formatter)
 
-    #
-    # Rotating application log
-    #
-
     rotating = logging.handlers.RotatingFileHandler(
-        LOG_DIR / "importer.log",
+        log_dir / filename,
         maxBytes=5_000_000,
         backupCount=5,
         encoding="utf-8",
     )
-
     rotating.setLevel(logging.INFO)
     rotating.setFormatter(formatter)
 
-    #
-    # Full debug log
-    #
-
     debug = logging.handlers.RotatingFileHandler(
-        LOG_DIR / "debug.log",
+        log_dir / "debug.log",
         maxBytes=20_000_000,
         backupCount=3,
         encoding="utf-8",
     )
-
     debug.setLevel(logging.DEBUG)
     debug.setFormatter(formatter)
 
-    #
-    # Per-run log
-    #
-
-    runfile = RUN_DIR / (
-        datetime.now().strftime("%Y%m%d-%H%M%S") + ".log"
-    )
-
-    run = logging.FileHandler(
-        runfile,
-        encoding="utf-8",
-    )
-
+    runfile = run_dir / (datetime.now().strftime("%Y%m%d-%H%M%S") + ".log")
+    run = logging.FileHandler(runfile, encoding="utf-8")
     run.setLevel(logging.DEBUG)
     run.setFormatter(formatter)
 
@@ -87,5 +65,5 @@ def setup_logging(
     logger.addHandler(run)
 
     logger.info("Logging initialized")
-
     return logger
+

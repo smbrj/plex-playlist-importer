@@ -174,9 +174,9 @@ class MatchingConfig:
 
     combined_weight: float = 0.15
 
-    min_title_score: float = 80.0
+    min_title_score: float = 95.0
 
-    fallback_title_score: float = 95.0
+    fallback_title_score: float = 80.0
 
     artist_aliases: dict[str, str] = field(default_factory=dict)
 
