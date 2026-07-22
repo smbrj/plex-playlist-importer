@@ -6,47 +6,37 @@
 # Documentation Statistics
 
 | Metric | Value |
-|---------|------:|
-| Approved Documents | 28 |
+|---|---:|
+| Approved Documents | 29 |
 | Architecture Decision Records | 10 |
 | Foundation Documents | 3 |
 | Architecture Documents | 4 |
 | Technical Reference Documents | 16 |
-| Reference Aids | 2 (planned) |
-| Latest Snapshot | Snapshot-012 |
+| Reference Aids | 2 |
+| Latest Snapshot | Snapshot-013 |
 
 # Technical Reference Documents
 
-| Document | Version | Status | Snapshot |
-|----------|:-------:|--------|:--------:|
-| subsystem-overview.md | 1.0 | Approved | 002 |
-| matching.md | 1.0 | Approved | 002 |
-| aliases.md | 1.0 | Approved | 002 |
-| cache.md | 1.0 | Approved | 002 |
-| plex.md | 1.0 | Approved | 002 |
-| lidarr.md | 1.0 | Approved | 003 |
-| xmplaylist.md | 1.0 | Approved | 003 |
-| configuration.md | 1.0 | Approved | 004 |
-| parser.md | 1.0 | Approved | 005 |
-| normalization.md | 1.0 | Approved | 006 |
-| search_index.md | 1.0 | Approved | 007 |
-| reporting.md | 1.0 | Approved | 008 |
-| runtime.md | 1.0 | Approved | 009 |
-| testing.md | 1.0 | Approved | 010 |
-| deployment.md | 1.0 | Approved | 011 |
-| analytics.md | 1.0 | Approved | 012 |
+All 16 planned technical reference documents are approved through Snapshot-012.
+
+# Reference Aids
+
+| Document | Version | Status | Snapshot | Purpose |
+|---|:---:|---|:---:|---|
+| GLOSSARY.md | 1.0 | Approved | 013 | Canonical project terminology |
+| snapshot_manifest.md | Active | Active | Per snapshot | Snapshot contents and change notes |
 
 # Documentation Roadmap
 
-All currently planned technical reference documents are approved.
+All currently planned technical reference documents and reference aids are approved.
 
 ## Next
 
-- GLOSSARY.md
 - Cross-reference audit
 - Terminology audit
 - Broken-link audit
-- Documentation baseline/final consolidation snapshot
+- Documentation Version 1.0 baseline
+- Final documentation snapshot
 
 ## Post-Documentation Technical Cleanup
 
@@ -55,22 +45,25 @@ All currently planned technical reference documents are approved.
 - Add dedicated normalization and SearchIndex tests.
 - Audit report-writer coverage and schema stability.
 - Add runtime exit-code regression tests.
-- Review logging configuration/startup.
+- Review logging configuration and startup.
 - Perform controlled Plex playlist-mode tests.
 - Protect persistent SQLite compatibility.
 - Review analytics CSV and `latest_run.json` schemas.
 - Add direct latest-run JSON and analytics failure tests.
-- Clarify/test multi-profile analytics semantics.
+- Clarify and test multi-profile analytics semantics.
 - Build the Linux/Unraid container.
 - Finalize cron scheduling and evaluate `cron.ini`.
-- Review real-world operational improvements after TIDAL and before containerization.
+- Review operational improvements after TIDAL and before containerization.
 - Implement the dashboard using existing analytics/status outputs.
 
-# Reference Aids
+# Maintenance Rules
 
-| Document | Status |
-|----------|--------|
-| GLOSSARY.md | Planned |
-| snapshot_manifest.md | Active |
+Whenever documentation changes:
+
+- Update affected documents.
+- Update this index when status, version, snapshot, or relationships change.
+- Update `GLOSSARY.md` when canonical terminology changes.
+- Include changes in the next snapshot.
+- Commit documentation changes with corresponding software changes whenever practical.
 
 This document is the authoritative inventory of project documentation.
