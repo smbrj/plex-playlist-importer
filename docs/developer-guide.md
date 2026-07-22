@@ -646,7 +646,7 @@ The search index supports operations such as:
 
 
      • Normalized artist lookup.
-     • Album artist comparison.
+     • Indexed normalized album-artist lookup.
      • Title comparison.
      • Alias handling.
      • Exact-match shortcuts.
@@ -824,10 +824,10 @@ The exact structure may evolve as the project grows, but the general organizatio
   |-- config.ini
   |-- requirements.txt
   |-- README.md
-  |-- docs/developer-guide.md
+  |-- DEVELOPER_GUIDE.md
   |-- CONTRIBUTING.md
   |-- CHANGELOG.md
-  |-- docs/PROJECT_HISTORY.md
+  |-- PROJECT_HISTORY.md
   |-- LICENSE
   |-- NOTICE
   |
@@ -855,18 +855,18 @@ The exact structure may evolve as the project grows, but the general organizatio
   |
   `-- docs/
       |-- documentation-standards.md
-      |-- subsystem-overview.md
-      |-- runtime.md
+      |-- architecture.md
+      |-- application-flow.md
 
 
                                                       15
 
        |-- configuration.md
-       |-- parser.md
+       |-- playlist-formats.md
        |-- testing.md
-       |-- runtime.md
+       |-- logging.md
        |
-       |-- 
+       |-- subsystems/
        |
        `-- adr/
 
@@ -1455,7 +1455,11 @@ Normalization may address:
       • Metadata suffixes.
       • Featured-artist notation.
       • Remaster descriptions.
-      • Live descriptions.
+      • Version metadata such as parenthetical or trailing live/edit labels.
+
+Normalization should remove metadata only when it is acting as version or recording information.
+Meaningful words that are part of the actual title must be preserved. For example, a title such as
+`Live and Let Die` must not lose the word `Live`, and `Clean Up Woman` must not lose `Clean`.
 
 The original input should remain available for reporting.
 
@@ -4434,11 +4438,15 @@ For example, if Lidarr becomes unavailable while processing unmatched tracks:
       • Reports should identify the Lidarr failure.
       • Runtime health should mark Lidarr appropriately.
 
-The current implementation may stop the remaining Lidarr processing when a request-level failure occurs.
+Current Lidarr diagnostics isolate expected request-level failures per unmatched entry where practical.
 
 
-Finer-grained per-track Lidarr error isolation is a future development item and should not be documented
-as currently implemented behavior.
+A failure while processing one unmatched entry is recorded for that entry and does not automatically stop
+the remaining Lidarr workload. Completed matching work and other eligible Lidarr entries are preserved.
+
+
+A shared or global Lidarr outage may still prevent further useful Lidarr work and should be reported through
+component health and operational status rather than misclassified as a Plex or matching failure.
 
 
 13.13 Lidarr Logging
@@ -6934,7 +6942,18 @@ Warnings associated with optional components should not necessarily cause the en
 treated as failed.
 
 
-The exact exit-code policy should be documented once formally defined and stabilized.
+The current stabilized exit-code contract is:
+
+- `0` — successful execution, including a clean dry run.
+- `1` — execution interrupted by the operator (`Ctrl-C`).
+- `2` — dry run completed with one or more warnings.
+- `4` — matching/reporting could continue, but the requested Plex playlist operation was skipped because Plex was unavailable.
+- `5` — the requested playlist operation was skipped for a Plex-resolution safety condition, such as stale cached matches blocking REPLACE/SYNC or a live-resolution count mismatch.
+
+Python `argparse` also uses exit code `2` for command-line usage errors. Operators should distinguish an
+argument-parsing failure from a completed dry run with warnings by console/stderr and log context.
+
+These behaviors are protected by application-level regression tests.
 
 
                                                        26
@@ -8421,7 +8440,7 @@ A conceptual project structure is:
   +-- LICENSE
   +-- NOTICE
   +-- CHANGELOG.md
-+-- docs/PROJECT_HISTORY.md
++-- PROJECT_HISTORY.md
 +-- CONTRIBUTING.md
   |
   +-- plex_playlist/
@@ -8464,15 +8483,15 @@ A conceptual project structure is:
       +-- developer-guide.md
       +-- documentation-standards.md
       +-- configuration.md
-      +-- parser.md
+      +-- playlist-formats.md
       +-- testing.md
-      +-- runtime.md
+      +-- logging.md
             |
       +-- adr/
       |   +-- ADR-001-...
       |   +-- ADR-002-...
       |
-      +-- 
+      +-- subsystems/
           +-- matching.md
           +-- aliases.md
           +-- plex.md
@@ -9067,7 +9086,7 @@ Examples:
 
   New Playlist Format
       -> README
-      -> parser.md
+      -> playlist-formats.md
       -> parser tests
       -> changelog
 
@@ -9627,7 +9646,7 @@ every change.
 ## 26.12 Project History
 
 
-`docs/PROJECT_HISTORY.md`
+`PROJECT_HISTORY.md`
 
 Project History preserves the evolution of Plex Playlist Importer.
 
@@ -9741,7 +9760,7 @@ How do I interpret logs?
        -> CHANGELOG.md
 
   How did the project evolve?
-      -> docs/PROJECT_HISTORY.md
+      -> PROJECT_HISTORY.md
 
   How do I contribute?
       -> CONTRIBUTING.md

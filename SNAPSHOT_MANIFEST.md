@@ -1,65 +1,26 @@
 # Documentation Snapshot Manifest
 
-**Snapshot:** 017  
+**Snapshot:** 018  
+**Documentation Release:** V1.1  
 **Date:** 2026-07-22  
-**Type:** Documentation Version 1.0 Baseline  
-**Status:** Final Consolidation Baseline
+**Type:** Full Documentation Maintenance Release  
+**Status:** Approved
 
-## Purpose
+## Base
 
-Snapshot-017 establishes the first fully consolidated documentation baseline for the Plex Playlist Importer.
+Documentation V1.0 / Snapshot-017.
 
-It supersedes the earlier documentation-development checkpoints as the preferred recovery point for the approved documentation set.
+## V1.1 Maintenance Changes
 
-## Baseline Includes
+- Removed obsolete `refresh_on_start` behavior from cache documentation.
+- Updated Lidarr documentation to reflect current per-entry request-failure isolation.
+- Documented the stabilized application exit-code contract, including the standard `argparse` exit-code-2 overlap.
+- Clarified normalization behavior so legitimate title words are preserved when they are not metadata.
+- Clarified the prebuilt normalized album-artist SearchIndex lookup.
+- Confirmed `.m3u8` parser implementation now conforms to the approved supported-format documentation.
+- Recorded the post-cleanup regression baseline of 145 passing tests.
 
-- Root project documentation.
-- Approved architecture decision records.
-- Approved technical reference documents.
-- Documentation standards and release process.
-- Canonical glossary.
-- Project history.
-- Authoritative documentation index.
+## Recovery Point
 
-## Consolidation Work Completed Before Baseline
-
-- Technical reference drafting and approval.
-- Documentation standards review.
-- Cross-reference audit.
-- Cross-reference corrections.
-- Terminology audit against `docs/GLOSSARY.md`.
-- Terminology corrections.
-- Broken-link/filesystem audit.
-- Filename/path/case corrections.
-- Canonical root README normalization to `README.md`.
-- Canonical Project History location normalization to `docs/PROJECT_HISTORY.md`.
-
-## Canonical Documentation Paths
-
-- `README.md`
-- `CHANGELOG.md`
-- `CONTRIBUTING.md`
-- `DOCUMENT_INDEX.md`
-- `docs/PROJECT_HISTORY.md`
-- `docs/developer-guide.md`
-- `docs/documentation-standards.md`
-- `docs/documentation-release-process.md`
-- `docs/GLOSSARY.md`
-- `docs/adr/`
-- Approved technical reference documents directly under `docs/`
-
-## Verification
-
-Before packaging this baseline:
-
-- The Markdown documentation inventory was enumerated.
-- Canonical README and Project History paths were verified.
-- The verified ADR-001 filename was preserved.
-- Active documentation was checked for obsolete documentation paths from the earlier planned structure.
-- The ZIP archive was integrity-tested after creation.
-
-## Post-Baseline Work
-
-The documentation drafting/consolidation phase is complete.
-
-The next project phase is the previously deferred post-documentation technical cleanup, followed by TIDAL integration according to the agreed project roadmap.
+Snapshot-018 supersedes Snapshot-017 as the preferred documentation recovery point.
+Snapshot-017 remains the immutable Documentation V1.0 baseline.

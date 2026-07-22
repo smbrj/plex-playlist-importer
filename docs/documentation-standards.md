@@ -399,7 +399,7 @@ The project documentation is organized by audience and purpose.
 | `DEVELOPER_GUIDE.md`              | Developers                     | Explain architecture, implementation, and development practices             |
 | `CONTRIBUTING.md`                 | Contributors                   | Explain contribution expectations and development workflow                  |
 | `CHANGELOG.md`                    | Users and developers           | Record release-level changes                                                |
-| `docs/PROJECT_HISTORY.md`              | Users, developers, maintainers | Preserve project origins, foundational decisions, milestones, and evolution |
+| `PROJECT_HISTORY.md`              | Users, developers, maintainers | Preserve project origins, foundational decisions, milestones, and evolution |
 | `LICENSE`                         | Everyone                       | Define the project's software license                                       |
 | `NOTICE`                          | Everyone                       | Maintain Apache 2.0 attribution and notice information                      |
 | `docs/documentation-standards.md` | Documentation authors          | Define documentation principles and conventions                             |
@@ -601,7 +601,7 @@ This section is required even when reconsideration is considered unlikely.
 
 ## 11. Project History and Foundational Decisions
 
-`docs/PROJECT_HISTORY.md` preserves the story of the project rather than the implementation details of the software.
+`PROJECT_HISTORY.md` preserves the story of the project rather than the implementation details of the software.
 
 Its purpose is to answer:
 

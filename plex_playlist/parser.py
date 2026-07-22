@@ -24,6 +24,7 @@ SUPPORTED_EXTENSIONS = {
     ".csv",
     ".tsv",
     ".m3u",
+    ".m3u8",
 }
 
 def _strip_track_number(value: str) -> str:
@@ -70,6 +71,7 @@ def parse_playlist_file(
         ".csv": parse_csv,
         ".tsv": parse_tsv,
         ".m3u": parse_m3u,
+        ".m3u8": parse_m3u,
     }
 
     parser = parsers.get(extension)

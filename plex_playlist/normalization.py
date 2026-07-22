@@ -344,9 +344,11 @@ def _remove_noise_phrases(value: str) -> str:
     #
 
     for noise in NOISE_WORDS:
-
+        # Standalone version/metadata words are only noise when they appear
+        # as trailing metadata. Removing them globally corrupts legitimate
+        # titles such as "Live and Let Die" and "Clean Up Woman".
         value = re.sub(
-            rf"\b{re.escape(noise)}\b",
+            rf"(?:\s*[-–—:]\s*|\s+)\b{re.escape(noise)}\b\s*$",
             "",
             value,
             flags=re.IGNORECASE,

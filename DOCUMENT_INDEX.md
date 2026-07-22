@@ -13,7 +13,7 @@
 | Architecture Documents | 4 |
 | Technical Reference Documents | 16 |
 | Reference Aids | 2 |
-| Latest Snapshot | Snapshot-017 |
+| Latest Snapshot | Snapshot-018 |
 
 # Technical Reference Documents
 
@@ -96,3 +96,36 @@ Snapshot-017 establishes the first consolidated documentation baseline after com
 - Broken-link/filesystem audit and corrections.
 
 Future documentation changes should be made against this baseline and included in subsequent documentation snapshots.
+
+---
+
+## Documentation Version 1.1 Maintenance Release
+
+**Status:** Approved  
+**Date:** 2026-07-22  
+**Base:** Documentation V1.0 / Snapshot-017
+**Approval Date:** 2026-07-22
+
+Documentation V1.1 synchronizes the approved documentation with Technical Cleanup Checkpoints 001–005.
+
+Maintenance scope:
+
+- Retire obsolete `refresh_on_start` documentation.
+- Reflect current Lidarr per-entry request-failure isolation.
+- Record the stabilized and regression-tested process exit-code contract.
+- Clarify normalization behavior introduced by Cleanup Checkpoint-002.
+- Clarify indexed album-artist SearchIndex behavior introduced by Cleanup Checkpoint-003.
+- Confirm M3U8 parser implementation now conforms to the already documented supported-format contract.
+- Record the validated full regression baseline of 145 passing tests.
+
+No new roadmap feature is introduced by Documentation V1.1.
+
+
+
+---
+
+## Current Documentation Release Status
+
+- Documentation V1.0 baseline: Complete — Snapshot-017.
+- Documentation V1.1 maintenance release: Approved.
+- V1.1 release snapshot: Complete — Snapshot-018.

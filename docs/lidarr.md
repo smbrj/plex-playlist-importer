@@ -827,9 +827,13 @@ If Lidarr searches its indexers but finds no acceptable release:
 
 If the API request to initiate the search fails:
 
-- Record the Lidarr operation failure.
+- Record the Lidarr operation failure for the affected entry.
 - Do not falsely record successful acquisition.
 - Preserve enough context for troubleshooting.
+- Continue processing other unmatched entries when the failure is isolated to that entry and continued work is safe.
+
+Expected request-level failures are isolated per entry where practical. A shared Lidarr outage or other
+global dependency failure may still prevent useful processing of the remaining Lidarr workload.
 
 ---
 

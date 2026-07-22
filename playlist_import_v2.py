@@ -1779,10 +1779,14 @@ def main() -> None:
 # Entry
 # ============================================================
 
-if __name__ == "__main__":
-
+def cli() -> None:
+    """Run the CLI and normalize Ctrl-C to process exit code 1."""
     try:
         main()
     except KeyboardInterrupt:
         print("\nInterrupted.")
         sys.exit(1)
+
+
+if __name__ == "__main__":
+    cli()

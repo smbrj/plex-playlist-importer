@@ -137,7 +137,7 @@ Representative examples include:
 | XMPlaylist max requests | 8 | 10 |
 | XMPlaylist max tracks | 100 | Unlimited if unset |
 | Plex cache maximum age | 12 hours | 24 hours |
-| Lidarr timeout | 20 seconds | 20 seconds |
+| Lidarr timeout | 60 seconds | 20 seconds |
 
 The configured value represents the current operating preference.
 
@@ -159,9 +159,9 @@ config_version = 3
 
 The configuration version provides a mechanism for distinguishing configuration schemas over time.
 
-The orchestrator validates this setting at startup. Configuration version `3` is currently supported. A missing or unsupported version causes startup to stop before dependent components are initialized.
+The current reviewed orchestrator loads this setting as part of `config.ini`, but no automatic configuration migration behavior has been verified in the current code.
 
-Automatic migration is not currently implemented; version validation prevents an incompatible configuration schema from being used silently.
+The value should therefore be treated as a schema identifier rather than as evidence of an implemented migration system.
 
 ---
 
@@ -238,10 +238,17 @@ remember_failed_searches = true
 retry_search_after_days = 7
 search_history_database = cache/lidarr_search_history.db
 
-timeout_seconds = 20
+timeout_seconds = 60
 ```
 
-The current orchestrator consumes all of the settings above. `remember_failed_searches`, `retry_search_after_days`, and `search_history_database` are passed into the Lidarr search-history and retry-policy implementation when Lidarr diagnostics/search processing runs.
+The current orchestrator directly consumes:
+
+- `enabled`
+- `url`
+- `api_key`
+- `timeout_seconds`
+
+The retry and history settings are used by the Lidarr search-history and retry-policy implementation.
 
 Lidarr search history is persistent operational state.
 
@@ -675,23 +682,28 @@ Plex library caching is configured in:
 
 Current configuration contains:
 
-| Setting | Purpose |
+| Setting | Current Status |
 |---|---|
-| `database` | SQLite Plex-library cache path |
-| `max_age_hours` | Maximum cache age before refresh is attempted |
+| `enabled` | Present in `config.ini`; not currently consumed by the reviewed main orchestration path |
+| `database` | Actively consumed |
+| `refresh_on_start` | Present in `config.ini`; not currently consumed by the reviewed main orchestration path |
+| `max_age_hours` | Actively consumed |
 
 Example:
 
 ```ini
 [cache]
 
+enabled = true
 database = cache/plex_library.db
+refresh_on_start = false
 max_age_hours = 12
 ```
 
-Cache use is the normal application behavior. Execution-specific overrides are:
+Current cache behavior is controlled primarily through:
 
 ```text
+normal cached operation
 --refresh-cache
 --no-cache
 ```
@@ -712,7 +724,7 @@ The built-in fallback is:
 24 hours
 ```
 
-The former `enabled` and `refresh_on_start` keys were removed during the post-documentation Configuration Audit because cache use, freshness evaluation, `--refresh-cache`, and `--no-cache` already define the supported behavior.
+The unused `enabled` and `refresh_on_start` settings should be evaluated during the post-documentation Configuration Audit.
 
 See `cache.md` for full cache behavior.
 
@@ -720,29 +732,25 @@ See `cache.md` for full cache behavior.
 
 # 20. Reports Configuration
 
-Report-related configuration is:
+Report-related configuration currently includes:
 
 ```ini
 [reports]
 
-directory = reports
-match = playlist_report.csv
 unmatched = unmatched.csv
-lidarr = lidarr_unmatched_report.csv
+output_path = reports/
 include_file_paths = false
 ```
 
-| Setting | Purpose |
+Current runtime status is:
+
+| Setting | Current Status |
 |---|---|
-| `directory` | Base directory for relative report filenames |
-| `match` | Default full match-report filename/path |
-| `unmatched` | Default unmatched-track filename/path |
-| `lidarr` | Default Lidarr diagnostic filename/path |
-| `include_file_paths` | Includes Plex media file paths in the match report when enabled |
+| `include_file_paths` | Actively consumed by the orchestrator |
+| `unmatched` | Present in `config.ini`, but not currently used by the main CLI report-path logic |
+| `output_path` | Present in `config.ini`, but not currently used by the main CLI report-path logic |
 
-Relative values are resolved from the selected `config.ini`. A report value containing its own directory is used relative to `config.ini` without additionally prepending `[reports] directory`. Absolute paths are used as supplied.
-
-The CLI options:
+Current CLI defaults provide report destinations such as:
 
 ```text
 --unmatched
@@ -750,7 +758,17 @@ The CLI options:
 --lidarr-report
 ```
 
-remain execution-specific overrides of these persistent defaults.
+Therefore, `unmatched` and `output_path` should not currently be documented as authoritative report-path controls.
+
+The current configuration also contains:
+
+```ini
+#path = reports/
+```
+
+which is commented and has no runtime effect.
+
+The report-path configuration should be reviewed during the post-documentation Configuration Audit.
 
 ---
 
@@ -825,9 +843,9 @@ trace=true
 pipeline / timing diagnostics
 ```
 
-## Runtime Logging Settings
+## Logging Settings Present but Not Currently Wired
 
-The logging subsystem consumes:
+The following settings exist in `config.ini`:
 
 ```text
 level
@@ -835,15 +853,38 @@ directory
 filename
 ```
 
-`level` controls console verbosity. `directory` selects the base logging directory. `filename` selects the rotating primary application log. The debug log and per-run logs remain under the same configured directory. Relative directories are resolved from the selected `config.ini`.
+but the reviewed current logging setup does not consume them.
+
+The current logging implementation uses its own hard-coded logging paths and filenames.
+
+Therefore, these keys should not presently be interpreted as controlling actual log destinations or log level.
+
+This discrepancy is a priority item for the post-documentation Configuration Audit.
 
 ---
 
-# 23. Playlist Behavior
+# 23. Playlist Configuration
 
-The former `[playlist] duplicates` and `preserve_order` keys were removed during the post-documentation Configuration Audit because they were not active runtime controls.
+The current `config.ini` contains:
 
-The application preserves source order where defined by the workflow, and duplicate handling is implemented by the relevant source/playlist logic rather than by these retired configuration keys. A new configuration option should be introduced only if a demonstrated operational need requires selectable behavior.
+```ini
+[playlist]
+
+duplicates = skip
+preserve_order = true
+```
+
+These settings express intended playlist behavior, but their runtime consumption was not identified in the reviewed main orchestration and Plex playlist-management paths.
+
+They should therefore be documented as:
+
+> Present in the current configuration schema, but not yet verified as active runtime controls in the reviewed implementation.
+
+The application does preserve source-order behavior in several processing areas, but that should not be attributed specifically to `preserve_order = true` until direct configuration consumption is verified.
+
+Similarly, duplicate behavior should not be attributed specifically to `duplicates = skip` without verified consumption.
+
+These settings should be included in the post-documentation Configuration Audit.
 
 ---
 
@@ -1192,16 +1233,30 @@ behavior     implementation
              or deprecate/remove
 ```
 
-The first post-documentation Configuration Audit completed the following items:
+Current known audit candidates include:
 
-- Removed unused `[cache] enabled` and `refresh_on_start`.
-- Replaced historical report-path keys with active `[reports] directory`, `match`, `unmatched`, and `lidarr` defaults.
-- Wired `[logging] level`, `directory`, and `filename`.
-- Removed unused `[playlist] duplicates` and `preserve_order`.
-- Wired Lidarr retry/history configuration into the main runtime path.
-- Added configuration-version validation.
+```text
+[cache]
+enabled
+refresh_on_start
 
-The playlist `sync` behavior remains a separate technical-cleanup review item because it currently behaves like `update`.
+[reports]
+unmatched
+output_path
+
+[logging]
+level
+directory
+filename
+
+[playlist]
+duplicates
+preserve_order
+```
+
+The playlist `sync` behavior should also be reviewed because it currently behaves like `update`.
+
+The audit should occur after the documentation phase so that the documentation first establishes an accurate baseline of current application behavior.
 
 ---
 

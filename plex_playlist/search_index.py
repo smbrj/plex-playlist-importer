@@ -29,7 +29,7 @@ from math import ceil
 @dataclass(slots=True)
 class SearchIndex:
     """
-    Immutable search index used by the matcher.
+    Read-mostly search index used by the matcher.
 
     Most lookups intentionally return lists because duplicate tracks
     (same artist/title on multiple albums) are common in music libraries.
@@ -46,6 +46,8 @@ class SearchIndex:
     )
 
     by_album: dict[str, list[LibraryTrack]] = field(default_factory=dict)
+
+    by_album_artist: dict[str, list[LibraryTrack]] = field(default_factory=dict)
 
     by_artist_title: dict[str, list[LibraryTrack]] = field(default_factory=dict)
 
@@ -66,6 +68,7 @@ class SearchIndex:
         title = defaultdict(list)
         title_token = defaultdict(list)
         album = defaultdict(list)
+        album_artist = defaultdict(list)
         artist_title = defaultdict(list)
         guid = {}
 
@@ -80,12 +83,14 @@ class SearchIndex:
             for token in title_tokens(track.title):
                 title_token[token].append(track)
             album_key = normalize_key(track.album)
+            album_artist_key = normalize_key(track.album_artist)
 
             combined_key = f"{artist_key}|{title_key}"
 
             artist[artist_key].append(track)
             title[title_key].append(track)
             album[album_key].append(track)
+            album_artist[album_artist_key].append(track)
             artist_title[combined_key].append(track)
 
             if track.guid:
@@ -97,6 +102,7 @@ class SearchIndex:
             by_title=dict(title),
             by_title_token=dict(title_token),
             by_album=dict(album),
+            by_album_artist=dict(album_artist),
             by_artist_title=dict(artist_title),
             by_guid=guid,
         )
@@ -213,10 +219,7 @@ class SearchIndex:
         artist: str,
     ) -> list[LibraryTrack]:
 
-        key = normalize_key(artist)
-
-        return [
-            track
-            for track in self.all_tracks
-            if normalize_key(track.album_artist) == key
-        ] 
+        return self.by_album_artist.get(
+            normalize_key(artist),
+            [],
+        )

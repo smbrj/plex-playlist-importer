@@ -125,7 +125,7 @@ The documentation was reorganized so that each document serves a specific purpos
 
 - `README.md` introduces the application and provides installation and basic usage.
 - `docs/developer-guide.md` describes the current architecture and development model.
-- `docs/PROJECT_HISTORY.md` records how the project evolved.
+- `PROJECT_HISTORY.md` records how the project evolved.
 - `CHANGELOG.md` records changes between releases.
 - Architecture Decision Records preserve the reasoning behind significant decisions.
 - Reference and subsystem documentation provide deeper detail where needed.

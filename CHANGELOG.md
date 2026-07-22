@@ -6,6 +6,17 @@ This changelog focuses on changes that materially affect application capabilitie
 
 ## [Unreleased]
 
+### Documentation 1.1 Maintenance
+
+- Updated cache documentation to remove the retired `refresh_on_start` behavior.
+- Updated Lidarr documentation to reflect per-entry request-failure isolation.
+- Documented the stabilized application exit-code contract and the standard `argparse` exit-code-2 overlap.
+- Clarified normalization behavior so legitimate title words such as `Live` and `Clean` are preserved when they are not metadata.
+- Clarified that album-artist matching uses a prebuilt normalized SearchIndex lookup.
+- Confirmed documented M3U8 input support now matches the released parser implementation and regression coverage.
+- Documentation V1.1 reflects Technical Cleanup Checkpoints 001–005 and the validated 145-test regression baseline.
+
+
 ### Added
 
 - Formal project documentation library, including:
