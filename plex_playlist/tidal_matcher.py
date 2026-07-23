@@ -77,12 +77,51 @@ def qualifying_candidates(
     return accepted
 
 
+DEFAULT_QUALITY_PREFERENCE = (
+    "DOLBY_ATMOS",
+    "HIRES_LOSSLESS",
+    "LOSSLESS",
+)
+
+
+def build_quality_rank(
+    quality_preference: tuple[str, ...] | list[str] | None = None,
+) -> dict[str, int]:
+    preference = tuple(quality_preference or DEFAULT_QUALITY_PREFERENCE)
+    size = len(preference)
+    return {
+        tag.strip().upper(): size - index
+        for index, tag in enumerate(preference)
+        if tag.strip()
+    }
+
+
+def tidal_quality_rank(
+    candidate: TidalTrackCandidate,
+    quality_preference: tuple[str, ...] | list[str] | None = None,
+) -> int:
+    if not candidate.quality:
+        return 0
+
+    rank = build_quality_rank(quality_preference)
+    tags = {
+        tag.strip().upper()
+        for tag in candidate.quality.split(",")
+        if tag.strip()
+    }
+    return max(
+        (rank.get(tag, 0) for tag in tags),
+        default=0,
+    )
+
+
 def choose_tidal_match(
     *,
     requested_artist: str,
     requested_title: str,
     candidates: list[TidalTrackCandidate],
     artist_aliases: Mapping[str, str] | None = None,
+    quality_preference: tuple[str, ...] | list[str] | None = None,
 ) -> TidalMatchDecision:
     accepted = qualifying_candidates(
         requested_artist=requested_artist,
@@ -97,10 +136,20 @@ def choose_tidal_match(
             reason="no exact studio match",
         )
 
-    # Phase 1 deliberately does NOT invent a TIDAL quality ordering. Until a
-    # live API response confirms the current quality fields/enums, preserve API
-    # order. The quality tie-breaker will be activated after that validation.
+    # Python's max() keeps the first item when keys tie, preserving TIDAL's
+    # result order as the deterministic fallback.
+    selected = max(
+        accepted,
+        key=lambda candidate: tidal_quality_rank(
+            candidate,
+            quality_preference,
+        ),
+    )
+
     return TidalMatchDecision(
-        matched=accepted[0],
-        reason="exact artist/title studio match",
+        matched=selected,
+        reason=(
+            "exact artist/title studio match; "
+            f"quality_rank={tidal_quality_rank(selected, quality_preference)}"
+        ),
     )

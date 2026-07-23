@@ -13,6 +13,7 @@ No business logic lives here.
 from __future__ import annotations
 
 import argparse
+import json
 import configparser
 import logging
 import sys
@@ -78,6 +79,19 @@ from plex_playlist.xmplaylist_state import XMPlaylistStateStore
 from plex_playlist.tidal_client import TidalClient, TidalError
 from plex_playlist.tidal_matcher import qualifying_candidates
 from plex_playlist.tidal_diagnostics import format_tidal_search_results
+from plex_playlist.tidal_cache import TidalSearchCache
+from plex_playlist.tidal_service import TidalSearchService
+from plex_playlist.tidal_config import parse_quality_preference
+from plex_playlist.tidal_user_auth import (
+    TidalTokenStore,
+    TidalUserTokenProvider,
+    WRITE_SCOPES,
+    authorize_interactively,
+)
+from plex_playlist.tidal_account import TidalAccountClient
+from plex_playlist.tidal_companion import TidalCompanionPlaylistService
+from plex_playlist.tidal_state import TidalStateStore
+from plex_playlist.tidal_reconcile import TidalReconciliationPlanner, TidalReconcileAction, TidalReconciliationExecutor
 
 from plex_playlist.lidarr_reporting import (
     LidarrDiagnosticRow,
@@ -648,6 +662,60 @@ def build_parser() -> argparse.ArgumentParser:
             "Read-only TIDAL diagnostic search. Loads credentials from "
             "[tidal] in config.ini, prints candidates and strict-match "
             "acceptance, and exits without modifying Plex or TIDAL."
+        ),
+    )
+
+
+    parser.add_argument(
+        "--tidal-authorize",
+        action="store_true",
+        help=(
+            "Authorize PPI for read-only TIDAL user playlists/favorites using "
+            "Authorization Code + PKCE."
+        ),
+    )
+
+    parser.add_argument(
+        "--tidal-authorize-write",
+        action="store_true",
+        help=(
+            "Reauthorize PPI with TIDAL playlist/collection write scopes. "
+            "This only grants permission; it does not modify account data."
+        ),
+    )
+
+    parser.add_argument(
+        "--tidal-write-test",
+        action="store_true",
+        help=(
+            "Reversible TIDAL write diagnostic: create, verify, and delete "
+            "one temporary playlist."
+        ),
+    )
+
+    parser.add_argument(
+        "--tidal-favorite-cleanup",
+        action="store_true",
+        help=(
+            "Remove only the temporary Peg favorite left by an interrupted "
+            "reversible favorite diagnostic."
+        ),
+    )
+
+    parser.add_argument(
+        "--tidal-favorite-test",
+        action="store_true",
+        help=(
+            "Reversible TIDAL favorite diagnostic using Steely Dan - Peg: "
+            "verify absent, add, verify present, remove, verify absent."
+        ),
+    )
+
+    parser.add_argument(
+        "--tidal-account-test",
+        action="store_true",
+        help=(
+            "Read-only TIDAL account diagnostic using saved user tokens."
         ),
     )
 
@@ -1450,6 +1518,643 @@ def run_tidal_search_diagnostic(
     )
 
 
+def run_tidal_unmatched_resolution(
+    *,
+    cfg: configparser.ConfigParser,
+    config_path: Path,
+    session,
+    matching_config: MatchingConfig,
+    run_status: RunStatus,
+    playlist_name: str,
+    dry_run: bool,
+) -> tuple[int, int]:
+    """
+    Resolve Plex-unmatched entries in TIDAL.
+
+    In a real run, matched TIDAL tracks are additively synchronized to a
+    same-named companion playlist. Dry runs never modify TIDAL state.
+    """
+
+    if not cfg.has_section("tidal"):
+        run_status.tidal = ComponentHealth.not_configured(
+            "missing [tidal] configuration"
+        )
+        return (0, 0)
+
+    tidal_cfg = cfg["tidal"]
+    if not tidal_cfg.getboolean("enabled", fallback=False):
+        run_status.tidal = ComponentHealth.disabled("disabled in configuration")
+        return (0, 0)
+
+    client_id = tidal_cfg.get("client_id", "").strip()
+    client_secret = tidal_cfg.get("client_secret", "").strip()
+    if not client_id or not client_secret:
+        raise RuntimeError(
+            "TIDAL is enabled but client_id/client_secret are missing."
+        )
+
+    client = TidalClient(
+        client_id=client_id,
+        client_secret=client_secret,
+        country_code=tidal_cfg.get("country_code", "US"),
+        timeout=tidal_cfg.getfloat("timeout", fallback=20.0),
+    )
+
+    cache = None
+    if tidal_cfg.getboolean("cache_enabled", fallback=True):
+        cache_path = Path(
+            tidal_cfg.get(
+                "cache_database",
+                "cache/tidal_search_cache.db",
+            )
+        )
+        if not cache_path.is_absolute():
+            cache_path = config_path.parent / cache_path
+
+        cache = TidalSearchCache(
+            cache_path,
+            max_age_hours=tidal_cfg.getfloat(
+                "cache_max_age_hours",
+                fallback=24.0,
+            ),
+        )
+        cache.initialize()
+
+    quality_config = parse_quality_preference(
+        tidal_cfg.get(
+            "quality_preference",
+            "DOLBY_ATMOS,HIRES_LOSSLESS,LOSSLESS",
+        )
+    )
+    for warning in quality_config.warnings:
+        logger.warning("TIDAL configuration: %s", warning)
+
+    logger.info(
+        "TIDAL quality preference: %s",
+        " > ".join(quality_config.values),
+    )
+
+    service = TidalSearchService(
+        client=client,
+        cache=cache,
+        artist_aliases=matching_config.artist_aliases,
+        quality_preference=quality_config.values,
+    )
+
+    unmatched = [
+        result.requested
+        for result in session.results
+        if result.matched is None
+    ]
+
+    matched_count = 0
+    searched_count = 0
+    matched_track_ids: list[str] = []
+    matched_track_metadata: dict[str, tuple[str, str, str]] = {}
+
+    for entry in unmatched:
+        resolution = service.resolve(entry.artist, entry.title)
+        searched_count += 1
+
+        if resolution.matched is None:
+            logger.info(
+                "TIDAL no match: %s - %s (%s)",
+                entry.artist,
+                entry.title,
+                resolution.source,
+            )
+            continue
+
+        matched_count += 1
+        candidate = resolution.matched
+        matched_track_ids.append(candidate.track_id)
+        matched_track_metadata[candidate.track_id] = (
+            candidate.artist,
+            candidate.title,
+            candidate.album,
+        )
+        logger.info(
+            "TIDAL match: %s - %s -> %s - %s "
+            "[%s] quality=%s (%s)",
+            entry.artist,
+            entry.title,
+            candidate.artist,
+            candidate.title,
+            candidate.track_id,
+            candidate.quality or "unknown",
+            resolution.source,
+        )
+
+    logger.info(
+        "TIDAL catalog resolution complete: %d/%d unmatched track(s) found",
+        matched_count,
+        searched_count,
+    )
+
+    companion_detail = "no companion update required"
+
+    if matched_track_ids:
+        if dry_run:
+            unique_count = len(set(matched_track_ids))
+            companion_detail = (
+                f"dry-run; would sync {unique_count} TIDAL track(s) "
+                f"to companion playlist {playlist_name!r}"
+            )
+            logger.info("TIDAL companion %s", companion_detail)
+        else:
+            tidal_cfg, token_file = _tidal_user_settings(
+                cfg=cfg,
+                config_path=config_path,
+            )
+
+            store = TidalTokenStore(token_file)
+            tokens = store.load()
+            granted = {scope for scope in tokens.scope.split() if scope}
+            required = {
+                "playlists.read",
+                "playlists.write",
+                "collection.read",
+                "collection.write",
+            }
+            missing = sorted(required - granted)
+            if missing:
+                raise RuntimeError(
+                    "Saved TIDAL user token lacks required playlist scope(s): "
+                    + ", ".join(missing)
+                    + ". Run --tidal-authorize-write first."
+                )
+
+            account_client = _build_tidal_account_client(
+                tidal_cfg=tidal_cfg,
+                token_file=token_file,
+            )
+
+            state_db = Path(
+                tidal_cfg.get(
+                    "state_database",
+                    "cache/tidal_state.db",
+                )
+            )
+            if not state_db.is_absolute():
+                state_db = config_path.parent / state_db
+
+            companion = TidalCompanionPlaylistService(
+                account_client,
+                state_store=TidalStateStore(state_db),
+            )
+            sync = companion.add_missing_tracks(
+                playlist_name=playlist_name,
+                track_ids=matched_track_ids,
+                metadata_by_track_id=matched_track_metadata,
+            )
+
+            state = "created" if sync.playlist_created else "reused"
+            companion_detail = (
+                f"{state} companion {sync.playlist.name!r}; "
+                f"playlist_added={len(sync.added_track_ids)}; "
+                f"playlist_existing={len(sync.existing_track_ids)}; "
+                f"favorites_added={len(sync.favorite_added_track_ids)}; "
+                f"favorites_existing={len(sync.favorite_existing_track_ids)}"
+            )
+            logger.info(
+                "TIDAL state recorded: %d track membership(s) -> %s",
+                sync.requested_track_count,
+                state_db,
+            )
+            logger.info(
+                "TIDAL companion playlist: %s [%s]; "
+                "playlist_added=%d; playlist_existing=%d; "
+                "favorites_added=%d; favorites_existing=%d",
+                sync.playlist.name,
+                sync.playlist.playlist_id,
+                len(sync.added_track_ids),
+                len(sync.existing_track_ids),
+                len(sync.favorite_added_track_ids),
+                len(sync.favorite_existing_track_ids),
+            )
+
+            planner = TidalReconciliationPlanner(
+                TidalStateStore(state_db)
+            )
+            decisions = planner.plan(
+                playlist_name=playlist_name,
+                desired_track_ids=matched_track_ids,
+            )
+
+            reconcile_counts: dict[str, int] = {}
+            for decision in decisions:
+                key = decision.action.value
+                reconcile_counts[key] = reconcile_counts.get(key, 0) + 1
+
+                if decision.action != TidalReconcileAction.KEEP:
+                    logger.info(
+                        "TIDAL reconcile plan: %s track=%s playlist=%s; %s",
+                        decision.action.value,
+                        decision.track_id,
+                        decision.playlist_name,
+                        decision.reason,
+                    )
+
+            if decisions:
+                summary = ", ".join(
+                    f"{key}={value}"
+                    for key, value in sorted(reconcile_counts.items())
+                )
+                logger.info(
+                    "TIDAL reconciliation plan: %s",
+                    summary,
+                )
+
+                executor = TidalReconciliationExecutor(
+                    client=account_client,
+                    state_store=TidalStateStore(state_db),
+                )
+                execution = executor.execute(decisions)
+
+                logger.info(
+                    "TIDAL reconciliation applied: "
+                    "playlist_removed=%d; favorites_removed=%d; "
+                    "favorites_preserved=%d",
+                    len(execution.playlist_tracks_removed),
+                    len(execution.favorites_removed),
+                    len(execution.favorites_preserved),
+                )
+
+    run_status.tidal = ComponentHealth.available_health(
+        f"catalog resolution {matched_count}/{searched_count}; "
+        f"{companion_detail}"
+    )
+
+    return matched_count, searched_count
+
+
+def _tidal_user_settings(
+    *,
+    cfg: configparser.ConfigParser,
+    config_path: Path,
+) -> tuple[configparser.SectionProxy, Path]:
+    if not cfg.has_section("tidal"):
+        raise RuntimeError("Missing [tidal] section in configuration.")
+
+    tidal_cfg = cfg["tidal"]
+    token_file = Path(
+        tidal_cfg.get(
+            "user_token_file",
+            "cache/tidal_user_tokens.json",
+        )
+    )
+    if not token_file.is_absolute():
+        token_file = config_path.parent / token_file
+
+    return tidal_cfg, token_file
+
+
+def run_tidal_authorize(
+    *,
+    cfg: configparser.ConfigParser,
+    config_path: Path,
+) -> None:
+    tidal_cfg, token_file = _tidal_user_settings(
+        cfg=cfg,
+        config_path=config_path,
+    )
+
+    client_id = tidal_cfg.get("client_id", "").strip()
+    if not client_id:
+        raise RuntimeError("TIDAL client_id is required.")
+
+    redirect_uri = tidal_cfg.get(
+        "redirect_uri",
+        "http://127.0.0.1:8765/callback",
+    ).strip()
+
+    tokens = authorize_interactively(
+        client_id=client_id,
+        redirect_uri=redirect_uri,
+        token_store=TidalTokenStore(token_file),
+        timeout_seconds=tidal_cfg.getint(
+            "authorization_timeout_seconds",
+            fallback=180,
+        ),
+        request_timeout=tidal_cfg.getfloat(
+            "timeout",
+            fallback=20.0,
+        ),
+    )
+
+    print("")
+    print("TIDAL user authorization completed.")
+    print(f"Token store: {token_file}")
+    print(f"Granted scope: {tokens.scope or '<server did not echo scope>'}")
+
+
+def run_tidal_authorize_write(
+    *,
+    cfg: configparser.ConfigParser,
+    config_path: Path,
+) -> None:
+    tidal_cfg, token_file = _tidal_user_settings(
+        cfg=cfg,
+        config_path=config_path,
+    )
+
+    client_id = tidal_cfg.get("client_id", "").strip()
+    if not client_id:
+        raise RuntimeError("TIDAL client_id is required.")
+
+    redirect_uri = tidal_cfg.get(
+        "redirect_uri",
+        "http://127.0.0.1:8765/callback",
+    ).strip()
+
+    tokens = authorize_interactively(
+        client_id=client_id,
+        redirect_uri=redirect_uri,
+        token_store=TidalTokenStore(token_file),
+        timeout_seconds=tidal_cfg.getint(
+            "authorization_timeout_seconds",
+            fallback=180,
+        ),
+        request_timeout=tidal_cfg.getfloat(
+            "timeout",
+            fallback=20.0,
+        ),
+        scopes=WRITE_SCOPES,
+    )
+
+    print("")
+    print("TIDAL user write authorization completed.")
+    print(f"Token store: {token_file}")
+    print(f"Granted scope: {tokens.scope or '<server did not echo scope>'}")
+
+
+def run_tidal_write_test(
+    *,
+    cfg: configparser.ConfigParser,
+    config_path: Path,
+) -> None:
+    tidal_cfg, token_file = _tidal_user_settings(
+        cfg=cfg,
+        config_path=config_path,
+    )
+
+    store = TidalTokenStore(token_file)
+    tokens = store.load()
+    granted = {scope for scope in tokens.scope.split() if scope}
+    required = {"playlists.write"}
+    missing = sorted(required - granted)
+    if missing:
+        raise RuntimeError(
+            "Saved TIDAL user token lacks required write scope(s): "
+            + ", ".join(missing)
+            + ". Run --tidal-authorize-write first."
+        )
+
+    provider = TidalUserTokenProvider(
+        store=store,
+        timeout=tidal_cfg.getfloat("timeout", fallback=20.0),
+    )
+    client = TidalAccountClient(
+        token_provider=provider,
+        country_code=tidal_cfg.get("country_code", "US"),
+        timeout=tidal_cfg.getfloat("timeout", fallback=20.0),
+    )
+
+    from datetime import datetime, timezone
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    name = f"PPI WRITE TEST {stamp}"
+    created = None
+
+    print("")
+    print("TIDAL WRITE TEST — REVERSIBLE TEMPORARY PLAYLIST")
+    print(f"Creating: {name}")
+    try:
+        created = client.create_playlist(
+            name,
+            description=(
+                "Temporary playlist created by Plex Playlist Importer "
+                "write diagnostics; safe to delete."
+            ),
+            access_type="UNLISTED",
+        )
+        print(f"Created: {created.name} [{created.playlist_id}]")
+
+        verified = client.get_playlist(created.playlist_id)
+        if verified.playlist_id != created.playlist_id:
+            raise RuntimeError("TIDAL write test verification ID mismatch.")
+        if verified.name != name:
+            raise RuntimeError(
+                "TIDAL write test verification name mismatch: "
+                f"expected {name!r}, got {verified.name!r}"
+            )
+        print("Verified: temporary playlist is readable through the API")
+    finally:
+        if created is not None:
+            client.delete_playlist(created.playlist_id)
+            print(f"Deleted: {created.name} [{created.playlist_id}]")
+
+    print("TIDAL write test completed successfully.")
+
+
+def _tidal_favorite_test_marker_path(
+    *,
+    config_path: Path,
+) -> Path:
+    return config_path.parent / "cache" / "tidal_favorite_test_state.json"
+
+
+def _write_tidal_favorite_test_marker(
+    path: Path,
+    *,
+    track_id: str,
+) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(
+            {
+                "track_id": track_id,
+                "original_state": "not_favorite",
+                "purpose": "reversible_tidal_favorite_test",
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+
+def _clear_tidal_favorite_test_marker(path: Path) -> None:
+    try:
+        path.unlink()
+    except FileNotFoundError:
+        pass
+
+
+def _build_tidal_account_client(
+    *,
+    tidal_cfg: configparser.SectionProxy,
+    token_file: Path,
+) -> TidalAccountClient:
+    provider = TidalUserTokenProvider(
+        store=TidalTokenStore(token_file),
+        timeout=tidal_cfg.getfloat("timeout", fallback=20.0),
+    )
+    return TidalAccountClient(
+        token_provider=provider,
+        country_code=tidal_cfg.get("country_code", "US"),
+        timeout=tidal_cfg.getfloat("timeout", fallback=20.0),
+        rate_limit_retries=tidal_cfg.getint(
+            "account_rate_limit_retries",
+            fallback=3,
+        ),
+        rate_limit_fallback_seconds=tidal_cfg.getfloat(
+            "account_rate_limit_fallback_seconds",
+            fallback=5.0,
+        ),
+    )
+
+
+def run_tidal_favorite_test(
+    *,
+    cfg: configparser.ConfigParser,
+    config_path: Path,
+) -> None:
+    tidal_cfg, token_file = _tidal_user_settings(
+        cfg=cfg,
+        config_path=config_path,
+    )
+
+    store = TidalTokenStore(token_file)
+    tokens = store.load()
+    granted = {scope for scope in tokens.scope.split() if scope}
+    missing = sorted({"collection.read", "collection.write"} - granted)
+    if missing:
+        raise RuntimeError(
+            "Saved TIDAL user token lacks required collection scope(s): "
+            + ", ".join(missing)
+            + ". Run --tidal-authorize-write first."
+        )
+
+    client = _build_tidal_account_client(
+        tidal_cfg=tidal_cfg,
+        token_file=token_file,
+    )
+
+    track_id = "317688870"
+    marker = _tidal_favorite_test_marker_path(config_path=config_path)
+
+    print("")
+    print("TIDAL FAVORITE TEST — REVERSIBLE")
+    print("Track: Steely Dan - Peg [317688870]")
+
+    if marker.exists():
+        print("Recovery marker found from an interrupted prior test.")
+        if client.is_favorite_track(track_id):
+            client.remove_favorite_track(track_id)
+            print("Recovery: removed prior temporary Peg favorite")
+        _clear_tidal_favorite_test_marker(marker)
+
+    if client.is_favorite_track(track_id):
+        raise RuntimeError(
+            "Safety stop: Peg is already a TIDAL favorite and no PPI recovery "
+            "marker claims ownership. No account changes were made."
+        )
+
+    print("Pre-check: Peg is not currently favorited")
+    added = False
+    _write_tidal_favorite_test_marker(marker, track_id=track_id)
+
+    try:
+        client.add_favorite_track(track_id)
+        added = True
+        print("Added: Peg to TIDAL favorites")
+
+        if not client.is_favorite_track(track_id):
+            raise RuntimeError(
+                "TIDAL favorite test failed: Peg was not visible after add."
+            )
+        print("Verified: Peg is present in TIDAL favorites")
+    finally:
+        if added:
+            client.remove_favorite_track(track_id)
+            print("Removed: Peg from TIDAL favorites")
+
+    if client.is_favorite_track(track_id):
+        raise RuntimeError(
+            "TIDAL favorite test cleanup failed: Peg remains favorited."
+        )
+
+    _clear_tidal_favorite_test_marker(marker)
+    print("Verified: original non-favorite state restored")
+    print("TIDAL favorite test completed successfully.")
+
+
+def run_tidal_favorite_cleanup(
+    *,
+    cfg: configparser.ConfigParser,
+    config_path: Path,
+) -> None:
+    tidal_cfg, token_file = _tidal_user_settings(
+        cfg=cfg,
+        config_path=config_path,
+    )
+    client = _build_tidal_account_client(
+        tidal_cfg=tidal_cfg,
+        token_file=token_file,
+    )
+
+    track_id = "317688870"
+    print("")
+    print("TIDAL FAVORITE CLEANUP")
+    print("Target only: Steely Dan - Peg [317688870]")
+
+    if client.is_favorite_track(track_id):
+        client.remove_favorite_track(track_id)
+        print("Removed: Peg from TIDAL favorites")
+    else:
+        print("Peg is already absent; nothing to remove")
+
+    if client.is_favorite_track(track_id):
+        raise RuntimeError("Cleanup failed: Peg remains favorited.")
+
+    _clear_tidal_favorite_test_marker(
+        _tidal_favorite_test_marker_path(config_path=config_path)
+    )
+    print("Verified: Peg is not a TIDAL favorite.")
+    print("Other favorite tracks were not modified.")
+
+
+
+def run_tidal_account_test(
+    *,
+    cfg: configparser.ConfigParser,
+    config_path: Path,
+) -> None:
+    tidal_cfg, token_file = _tidal_user_settings(
+        cfg=cfg,
+        config_path=config_path,
+    )
+
+    provider = TidalUserTokenProvider(
+        store=TidalTokenStore(token_file),
+        timeout=tidal_cfg.getfloat("timeout", fallback=20.0),
+    )
+
+    client = TidalAccountClient(
+        token_provider=provider,
+        country_code=tidal_cfg.get("country_code", "US"),
+        timeout=tidal_cfg.getfloat("timeout", fallback=20.0),
+    )
+
+    summary = client.summary()
+
+    print("")
+    print("TIDAL USER ACCOUNT — READ ONLY")
+    print(f"Owned playlists: {len(summary.playlists)}")
+    for playlist in summary.playlists:
+        print(f"  - {playlist.name or '<unnamed>'} [{playlist.playlist_id}]")
+    print(f"Favorite tracks: {summary.favorite_track_count}")
+
+
 # ============================================================
 # Main
 # ============================================================
@@ -1554,6 +2259,48 @@ def main() -> None:
             args=args,
             cfg=cfg,
             matching_config=config,
+        )
+        return
+
+    if args.tidal_authorize:
+        run_tidal_authorize(
+            cfg=cfg,
+            config_path=args.config,
+        )
+        return
+
+    if args.tidal_authorize_write:
+        run_tidal_authorize_write(
+            cfg=cfg,
+            config_path=args.config,
+        )
+        return
+
+    if args.tidal_write_test:
+        run_tidal_write_test(
+            cfg=cfg,
+            config_path=args.config,
+        )
+        return
+
+    if args.tidal_favorite_cleanup:
+        run_tidal_favorite_cleanup(
+            cfg=cfg,
+            config_path=args.config,
+        )
+        return
+
+    if args.tidal_favorite_test:
+        run_tidal_favorite_test(
+            cfg=cfg,
+            config_path=args.config,
+        )
+        return
+
+    if args.tidal_account_test:
+        run_tidal_account_test(
+            cfg=cfg,
+            config_path=args.config,
         )
         return
 
@@ -1693,6 +2440,26 @@ def main() -> None:
             logger.warning(warning)
             run_status.lidarr = ComponentHealth.unavailable(str(exc))
             run_status.warnings.append(warning)
+
+    # --------------------------------------------------------
+    # TIDAL unmatched resolution + additive companion playlist
+    # --------------------------------------------------------
+
+    try:
+        run_tidal_unmatched_resolution(
+            cfg=cfg,
+            config_path=args.config,
+            session=session,
+            matching_config=config,
+            run_status=run_status,
+            playlist_name=playlist_name,
+            dry_run=args.dry_run,
+        )
+    except Exception as exc:
+        warning = f"TIDAL processing skipped: {exc}"
+        logger.warning(warning)
+        run_status.tidal = ComponentHealth.unavailable(str(exc))
+        run_status.warnings.append(warning)
 
     # --------------------------------------------------------
     # Dry run
