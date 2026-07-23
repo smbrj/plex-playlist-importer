@@ -75,6 +75,9 @@ from plex_playlist.xmstation_profiles import (
     run_all_profiles,
 )
 from plex_playlist.xmplaylist_state import XMPlaylistStateStore
+from plex_playlist.tidal_client import TidalClient, TidalError
+from plex_playlist.tidal_matcher import qualifying_candidates
+from plex_playlist.tidal_diagnostics import format_tidal_search_results
 
 from plex_playlist.lidarr_reporting import (
     LidarrDiagnosticRow,
@@ -635,6 +638,17 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=Path("config.ini"),
         help="Configuration file",
+    )
+
+    parser.add_argument(
+        "--tidal-search",
+        nargs=2,
+        metavar=("ARTIST", "TRACK"),
+        help=(
+            "Read-only TIDAL diagnostic search. Loads credentials from "
+            "[tidal] in config.ini, prints candidates and strict-match "
+            "acceptance, and exits without modifying Plex or TIDAL."
+        ),
     )
 
     parser.add_argument(
@@ -1385,6 +1399,57 @@ def run_library_intelligence(
     return True
 
 
+def run_tidal_search_diagnostic(
+    *,
+    args,
+    cfg: configparser.ConfigParser,
+    matching_config: MatchingConfig,
+) -> None:
+    """Run a read-only TIDAL search diagnostic and print sanitized results."""
+
+    if not cfg.has_section("tidal"):
+        raise RuntimeError("Missing [tidal] section in configuration.")
+
+    tidal_cfg = cfg["tidal"]
+    client_id = tidal_cfg.get("client_id", "").strip()
+    client_secret = tidal_cfg.get("client_secret", "").strip()
+
+    if not client_id or not client_secret:
+        raise RuntimeError(
+            "TIDAL client_id and client_secret are required for --tidal-search."
+        )
+
+    artist, title = args.tidal_search
+
+    client = TidalClient(
+        client_id=client_id,
+        client_secret=client_secret,
+        country_code=tidal_cfg.get("country_code", "US"),
+        timeout=tidal_cfg.getfloat("timeout", fallback=20.0),
+    )
+
+    try:
+        candidates = client.search_tracks(artist, title)
+    except TidalError as exc:
+        raise RuntimeError(str(exc)) from exc
+
+    accepted = qualifying_candidates(
+        requested_artist=artist,
+        requested_title=title,
+        candidates=candidates,
+        artist_aliases=matching_config.artist_aliases,
+    )
+
+    print(
+        format_tidal_search_results(
+            requested_artist=artist,
+            requested_title=title,
+            candidates=candidates,
+            accepted=accepted,
+        )
+    )
+
+
 # ============================================================
 # Main
 # ============================================================
@@ -1483,6 +1548,14 @@ def main() -> None:
         cfg,
         args.config,
     )
+
+    if args.tidal_search is not None:
+        run_tidal_search_diagnostic(
+            args=args,
+            cfg=cfg,
+            matching_config=config,
+        )
+        return
 
     
     # --------------------------------------------------------
