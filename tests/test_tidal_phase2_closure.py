@@ -63,3 +63,10 @@ def test_phase2_production_hooks_are_present():
 
 def test_temporary_cp016_ownership_cli_is_not_present():
     assert "--tidal-mark-test-owned" not in SOURCE
+
+
+def test_tidal_destructive_handoff_is_post_plex_update_only():
+    main = _main_source()
+    assert main.index("plex.update_playlist(") < main.index(
+        "executor.execute(pending_decisions)"
+    )

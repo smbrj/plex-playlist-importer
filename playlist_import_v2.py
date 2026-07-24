@@ -1536,7 +1536,7 @@ def run_tidal_unmatched_resolution(
     run_status: RunStatus,
     playlist_name: str,
     dry_run: bool,
-) -> tuple[int, int]:
+) -> tuple[int, int, tuple | None]:
     """
     Resolve Plex-unmatched entries in TIDAL.
 
@@ -1548,12 +1548,12 @@ def run_tidal_unmatched_resolution(
         run_status.tidal = ComponentHealth.not_configured(
             "missing [tidal] configuration"
         )
-        return (0, 0)
+        return (0, 0, None)
 
     tidal_cfg = cfg["tidal"]
     if not tidal_cfg.getboolean("enabled", fallback=False):
         run_status.tidal = ComponentHealth.disabled("disabled in configuration")
-        return (0, 0)
+        return (0, 0, None)
 
     client_id = tidal_cfg.get("client_id", "").strip()
     client_secret = tidal_cfg.get("client_secret", "").strip()
@@ -1687,6 +1687,7 @@ def run_tidal_unmatched_resolution(
         logger.info("TIDAL matched-track report written: %s", tidal_match_report)
 
     companion_detail = "no companion update required"
+    pending_reconciliation = None
 
     if matched_track_ids:
         if dry_run:
@@ -1800,19 +1801,14 @@ def run_tidal_unmatched_resolution(
                     summary,
                 )
 
-                executor = TidalReconciliationExecutor(
-                    client=account_client,
-                    state_store=TidalStateStore(state_db),
+                pending_reconciliation = (
+                    account_client,
+                    state_db,
+                    decisions,
                 )
-                execution = executor.execute(decisions)
-
                 logger.info(
-                    "TIDAL reconciliation applied: "
-                    "playlist_removed=%d; favorites_removed=%d; "
-                    "favorites_preserved=%d",
-                    len(execution.playlist_tracks_removed),
-                    len(execution.favorites_removed),
-                    len(execution.favorites_preserved),
+                    "TIDAL reconciliation deferred until Plex playlist "
+                    "update succeeds"
                 )
 
     run_status.tidal = ComponentHealth.available_health(
@@ -1820,7 +1816,7 @@ def run_tidal_unmatched_resolution(
         f"{companion_detail}"
     )
 
-    return matched_count, searched_count
+    return matched_count, searched_count, pending_reconciliation
 
 
 def _tidal_user_settings(
@@ -1946,6 +1942,7 @@ def run_tidal_write_test(
         )
 
     provider = TidalUserTokenProvider(
+        client_id=tidal_cfg.get("client_id", "").strip(),
         store=store,
         timeout=tidal_cfg.getfloat("timeout", fallback=20.0),
     )
@@ -2030,6 +2027,7 @@ def _build_tidal_account_client(
     token_file: Path,
 ) -> TidalAccountClient:
     provider = TidalUserTokenProvider(
+        client_id=tidal_cfg.get("client_id", "").strip(),
         store=TidalTokenStore(token_file),
         timeout=tidal_cfg.getfloat("timeout", fallback=20.0),
     )
@@ -2170,6 +2168,7 @@ def run_tidal_account_test(
     )
 
     provider = TidalUserTokenProvider(
+        client_id=tidal_cfg.get("client_id", "").strip(),
         store=TidalTokenStore(token_file),
         timeout=tidal_cfg.getfloat("timeout", fallback=20.0),
     )
@@ -2494,8 +2493,14 @@ def main() -> None:
     # TIDAL unmatched resolution + additive companion playlist
     # --------------------------------------------------------
 
+    pending_tidal_reconciliation = None
+
     try:
-        run_tidal_unmatched_resolution(
+        (
+            _tidal_matched_count,
+            _tidal_searched_count,
+            pending_tidal_reconciliation,
+        ) = run_tidal_unmatched_resolution(
             cfg=cfg,
             config_path=args.config,
             session=session,
@@ -2517,6 +2522,11 @@ def main() -> None:
     if args.dry_run:
 
         run_status.playlist_state = "DRY RUN"
+        if pending_tidal_reconciliation is not None:
+            logger.info(
+                "TIDAL destructive reconciliation skipped: dry-run; "
+                "Plex playlist update not performed"
+            )
         logger.info("Dry run complete (no playlist changes)")
         write_run_analytics(
             args=args,
@@ -2651,6 +2661,27 @@ def main() -> None:
         if run_status.stale_plex_matches
         else "UPDATED"
     )
+
+    if pending_tidal_reconciliation is not None:
+        (
+            pending_account_client,
+            pending_state_db,
+            pending_decisions,
+        ) = pending_tidal_reconciliation
+        executor = TidalReconciliationExecutor(
+            client=pending_account_client,
+            state_store=TidalStateStore(pending_state_db),
+        )
+        execution = executor.execute(pending_decisions)
+        logger.info(
+            "TIDAL reconciliation applied after confirmed Plex update: "
+            "playlist_removed=%d; favorites_removed=%d; "
+            "favorites_preserved=%d",
+            len(execution.playlist_tracks_removed),
+            len(execution.favorites_removed),
+            len(execution.favorites_preserved),
+        )
+
     logger.info("Done.")
     write_run_analytics(
         args=args,

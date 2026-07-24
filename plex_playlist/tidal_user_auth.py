@@ -148,6 +148,7 @@ def exchange_authorization_code(
 
 def refresh_user_tokens(
     *,
+    client_id: str,
     refresh_token: str,
     timeout: float = 20.0,
     session: requests.Session | None = None,
@@ -164,6 +165,7 @@ def refresh_user_tokens(
             data={
                 "grant_type": "refresh_token",
                 "refresh_token": refresh_token,
+                "client_id": client_id,
             },
             timeout=timeout,
         )
@@ -222,10 +224,12 @@ class TidalUserTokenProvider:
     def __init__(
         self,
         *,
+        client_id: str,
         store: TidalTokenStore,
         timeout: float = 20.0,
         session: requests.Session | None = None,
     ) -> None:
+        self.client_id = client_id
         self.store = store
         self.timeout = timeout
         self.session = session or requests.Session()
@@ -236,6 +240,7 @@ class TidalUserTokenProvider:
             return tokens.access_token
 
         refreshed = refresh_user_tokens(
+            client_id=self.client_id,
             refresh_token=tokens.refresh_token,
             timeout=self.timeout,
             session=self.session,
