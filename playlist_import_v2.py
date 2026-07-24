@@ -81,6 +81,7 @@ from plex_playlist.tidal_matcher import qualifying_candidates
 from plex_playlist.tidal_diagnostics import format_tidal_search_results
 from plex_playlist.tidal_cache import TidalSearchCache
 from plex_playlist.tidal_service import TidalSearchService
+from plex_playlist.tidal_reporting import write_tidal_matched_report
 from plex_playlist.tidal_config import parse_quality_preference
 from plex_playlist.tidal_user_auth import (
     TidalTokenStore,
@@ -1629,6 +1630,7 @@ def run_tidal_unmatched_resolution(
     searched_count = 0
     matched_track_ids: list[str] = []
     matched_track_metadata: dict[str, tuple[str, str, str]] = {}
+    matched_candidates = []
 
     for entry in unmatched:
         resolution = service.resolve(entry.artist, entry.title)
@@ -1645,6 +1647,7 @@ def run_tidal_unmatched_resolution(
 
         matched_count += 1
         candidate = resolution.matched
+        matched_candidates.append(candidate)
         matched_track_ids.append(candidate.track_id)
         matched_track_metadata[candidate.track_id] = (
             candidate.artist,
@@ -1668,6 +1671,20 @@ def run_tidal_unmatched_resolution(
         matched_count,
         searched_count,
     )
+
+    reports_directory = Path(
+        cfg.get("reports", "directory", fallback="reports").strip()
+        or "reports"
+    )
+    if not reports_directory.is_absolute():
+        reports_directory = config_path.parent / reports_directory
+
+    tidal_match_report = write_tidal_matched_report(
+        candidates=matched_candidates,
+        reports_directory=reports_directory,
+    )
+    if tidal_match_report is not None:
+        logger.info("TIDAL matched-track report written: %s", tidal_match_report)
 
     companion_detail = "no companion update required"
 
@@ -2430,6 +2447,20 @@ def main() -> None:
     )
 
     lidarr_rows: list[LidarrDiagnosticRow] = []
+
+    external_unmatched_count = sum(
+        1 for result in session.results if result.matched is None
+    )
+    tidal_dispatch_enabled = (
+        cfg.has_section("tidal")
+        and cfg.getboolean("tidal", "enabled", fallback=False)
+    )
+    logger.info(
+        "External unmatched dispatch pool: %d track(s); Lidarr=%s; TIDAL=%s",
+        external_unmatched_count,
+        "enabled" if (args.lidarr_check or args.lidarr_search) else "not requested",
+        "enabled" if tidal_dispatch_enabled else "disabled",
+    )
 
     # --------------------------------------------------------
     # check lidarr
