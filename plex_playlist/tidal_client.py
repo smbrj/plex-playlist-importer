@@ -35,6 +35,7 @@ class TidalTrackCandidate:
     album: str
     quality: str | None = None
     version: str = ""
+    explicit: bool = False
 
 
 class TidalClient:
@@ -309,6 +310,7 @@ def _parse_track_document(
         album=album,
         quality=_candidate_quality(attributes),
         version=str(attributes.get("version", "") or "").strip(),
+        explicit=attributes.get("explicit") is True,
     )
 
 
@@ -368,6 +370,7 @@ def _parse_search_candidates(
                 album=album,
                 quality=_candidate_quality(attributes),
                 version=str(attributes.get("version", "") or "").strip(),
+                explicit=attributes.get("explicit") is True,
             )
         )
 

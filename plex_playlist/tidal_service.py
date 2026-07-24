@@ -42,11 +42,13 @@ class TidalSearchService:
         cache: TidalSearchCache | None = None,
         artist_aliases: dict[str, str] | None = None,
         quality_preference: tuple[str, ...] | list[str] | None = None,
+        allow_explicit: bool = True,
     ) -> None:
         self.client = client
         self.cache = cache
         self.artist_aliases = artist_aliases or {}
         self.quality_preference = quality_preference
+        self.allow_explicit = bool(allow_explicit)
 
     def resolve(self, artist: str, title: str) -> TidalResolution:
         search_title = tidal_requested_title(title)
@@ -56,6 +58,7 @@ class TidalSearchService:
                 artist,
                 search_title,
                 aliases=self.artist_aliases,
+                allow_explicit=self.allow_explicit,
             )
             if lookup.found:
                 return TidalResolution(
@@ -70,6 +73,7 @@ class TidalSearchService:
             candidates=candidates,
             artist_aliases=self.artist_aliases,
             quality_preference=self.quality_preference,
+            allow_explicit=self.allow_explicit,
         )
 
         if self.cache is not None:
@@ -79,12 +83,14 @@ class TidalSearchService:
                     search_title,
                     decision.matched,
                     aliases=self.artist_aliases,
+                    allow_explicit=self.allow_explicit,
                 )
             else:
                 self.cache.put_no_match(
                     artist,
                     search_title,
                     aliases=self.artist_aliases,
+                    allow_explicit=self.allow_explicit,
                 )
 
         return TidalResolution(

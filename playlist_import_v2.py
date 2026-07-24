@@ -1501,11 +1501,17 @@ def run_tidal_search_diagnostic(
     except TidalError as exc:
         raise RuntimeError(str(exc)) from exc
 
+    allow_explicit = tidal_cfg.getboolean(
+        "allow_explicit",
+        fallback=True,
+    )
+
     accepted = qualifying_candidates(
         requested_artist=artist,
         requested_title=title,
         candidates=candidates,
         artist_aliases=matching_config.artist_aliases,
+        allow_explicit=allow_explicit,
     )
 
     print(
@@ -1514,6 +1520,8 @@ def run_tidal_search_diagnostic(
             requested_title=title,
             candidates=candidates,
             accepted=accepted,
+            artist_aliases=matching_config.artist_aliases,
+            allow_explicit=allow_explicit,
         )
     )
 
@@ -1594,11 +1602,21 @@ def run_tidal_unmatched_resolution(
         " > ".join(quality_config.values),
     )
 
+    allow_explicit = tidal_cfg.getboolean(
+        "allow_explicit",
+        fallback=True,
+    )
+    logger.info(
+        "TIDAL explicit content: %s",
+        "allowed" if allow_explicit else "rejected by configuration",
+    )
+
     service = TidalSearchService(
         client=client,
         cache=cache,
         artist_aliases=matching_config.artist_aliases,
         quality_preference=quality_config.values,
+        allow_explicit=allow_explicit,
     )
 
     unmatched = [

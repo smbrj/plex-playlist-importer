@@ -41,6 +41,7 @@ def qualifying_candidates(
     requested_title: str,
     candidates: list[TidalTrackCandidate],
     artist_aliases: Mapping[str, str] | None = None,
+    allow_explicit: bool = True,
 ) -> list[TidalTrackCandidate]:
     aliases = artist_aliases or {}
 
@@ -72,9 +73,42 @@ def qualifying_candidates(
         ):
             continue
 
+        if not allow_explicit and candidate.explicit:
+            continue
+
         accepted.append(candidate)
 
     return accepted
+
+
+def tidal_candidate_rejection_reason(
+    *,
+    requested_artist: str,
+    requested_title: str,
+    candidate: TidalTrackCandidate,
+    artist_aliases: Mapping[str, str] | None = None,
+    allow_explicit: bool = True,
+) -> str | None:
+    aliases = artist_aliases or {}
+
+    if not candidate.artist:
+        return "artist metadata missing"
+
+    if canonical_artist_key(candidate.artist, aliases) != canonical_artist_key(
+        requested_artist, aliases
+    ):
+        return "artist mismatch"
+
+    if normalize_title(candidate.title) != normalize_title(requested_title):
+        return "track mismatch"
+
+    if not is_acceptable_studio_recording(candidate.title, candidate.version):
+        return "non-studio recording"
+
+    if not allow_explicit and candidate.explicit:
+        return "explicit content rejected by configuration"
+
+    return None
 
 
 DEFAULT_QUALITY_PREFERENCE = (
@@ -122,12 +156,14 @@ def choose_tidal_match(
     candidates: list[TidalTrackCandidate],
     artist_aliases: Mapping[str, str] | None = None,
     quality_preference: tuple[str, ...] | list[str] | None = None,
+    allow_explicit: bool = True,
 ) -> TidalMatchDecision:
     accepted = qualifying_candidates(
         requested_artist=requested_artist,
         requested_title=requested_title,
         candidates=candidates,
         artist_aliases=artist_aliases,
+        allow_explicit=allow_explicit,
     )
 
     if not accepted:

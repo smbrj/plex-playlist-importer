@@ -45,22 +45,41 @@ class TidalSearchCache:
                     album TEXT,
                     quality TEXT,
                     version TEXT,
+                    explicit INTEGER NOT NULL DEFAULT 0,
                     cached_at TEXT NOT NULL,
                     expires_at TEXT NOT NULL,
                     PRIMARY KEY (artist_key, title_key)
                 )
                 """
             )
+            columns = {
+                row[1]
+                for row in conn.execute(
+                    "PRAGMA table_info(tidal_search_cache)"
+                ).fetchall()
+            }
+            if "explicit" not in columns:
+                conn.execute(
+                    "ALTER TABLE tidal_search_cache "
+                    "ADD COLUMN explicit INTEGER NOT NULL DEFAULT 0"
+                )
 
     @staticmethod
     def _keys(
         artist: str,
         title: str,
         aliases: dict[str, str] | None = None,
+        allow_explicit: bool | None = None,
     ) -> tuple[str, str]:
+        title_key = normalize_title(title)
+        if allow_explicit is not None:
+            title_key = (
+                f"{title_key}\x1fallow_explicit="
+                f"{1 if allow_explicit else 0}"
+            )
         return (
             canonical_artist_key(artist, aliases or {}),
-            normalize_title(title),
+            title_key,
         )
 
     def get(
@@ -70,15 +89,18 @@ class TidalSearchCache:
         *,
         aliases: dict[str, str] | None = None,
         now: datetime | None = None,
+        allow_explicit: bool | None = None,
     ) -> TidalCacheLookup:
-        artist_key, title_key = self._keys(artist, title, aliases)
+        artist_key, title_key = self._keys(
+            artist, title, aliases, allow_explicit
+        )
         now = now or datetime.now(timezone.utc)
 
         with sqlite3.connect(self.database) as conn:
             row = conn.execute(
                 """
                 SELECT status, track_id, artist, title, album, quality,
-                       version, expires_at
+                       version, explicit, expires_at
                 FROM tidal_search_cache
                 WHERE artist_key = ? AND title_key = ?
                 """,
@@ -88,7 +110,7 @@ class TidalSearchCache:
             if row is None:
                 return TidalCacheLookup(found=False, matched=None)
 
-            expires_at = datetime.fromisoformat(row[7])
+            expires_at = datetime.fromisoformat(row[8])
             if expires_at <= now:
                 conn.execute(
                     """
@@ -111,6 +133,7 @@ class TidalSearchCache:
                 album=row[4] or "",
                 quality=row[5],
                 version=row[6] or "",
+                explicit=bool(row[7]),
             ),
         )
 
@@ -122,6 +145,7 @@ class TidalSearchCache:
         *,
         aliases: dict[str, str] | None = None,
         now: datetime | None = None,
+        allow_explicit: bool | None = None,
     ) -> None:
         self._put(
             requested_artist,
@@ -130,6 +154,7 @@ class TidalSearchCache:
             candidate=candidate,
             aliases=aliases,
             now=now,
+            allow_explicit=allow_explicit,
         )
 
     def put_no_match(
@@ -139,6 +164,7 @@ class TidalSearchCache:
         *,
         aliases: dict[str, str] | None = None,
         now: datetime | None = None,
+        allow_explicit: bool | None = None,
     ) -> None:
         self._put(
             requested_artist,
@@ -147,6 +173,7 @@ class TidalSearchCache:
             candidate=None,
             aliases=aliases,
             now=now,
+            allow_explicit=allow_explicit,
         )
 
     def _put(
@@ -158,11 +185,13 @@ class TidalSearchCache:
         candidate: TidalTrackCandidate | None,
         aliases: dict[str, str] | None,
         now: datetime | None,
+        allow_explicit: bool | None,
     ) -> None:
         artist_key, title_key = self._keys(
             requested_artist,
             requested_title,
             aliases,
+            allow_explicit,
         )
         now = now or datetime.now(timezone.utc)
         expires_at = now + timedelta(hours=self.max_age_hours)
@@ -172,10 +201,10 @@ class TidalSearchCache:
                 """
                 INSERT INTO tidal_search_cache (
                     artist_key, title_key, status,
-                    track_id, artist, title, album, quality, version,
+                    track_id, artist, title, album, quality, version, explicit,
                     cached_at, expires_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(artist_key, title_key) DO UPDATE SET
                     status = excluded.status,
                     track_id = excluded.track_id,
@@ -184,6 +213,7 @@ class TidalSearchCache:
                     album = excluded.album,
                     quality = excluded.quality,
                     version = excluded.version,
+                    explicit = excluded.explicit,
                     cached_at = excluded.cached_at,
                     expires_at = excluded.expires_at
                 """,
@@ -197,6 +227,7 @@ class TidalSearchCache:
                     candidate.album if candidate else None,
                     candidate.quality if candidate else None,
                     candidate.version if candidate else None,
+                    1 if candidate and candidate.explicit else 0,
                     now.isoformat(),
                     expires_at.isoformat(),
                 ),
