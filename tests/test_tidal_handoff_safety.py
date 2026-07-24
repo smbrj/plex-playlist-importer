@@ -27,12 +27,12 @@ def test_tidal_helper_explicitly_logs_deferred_reconciliation():
 
 def test_destructive_tidal_execution_occurs_after_plex_update():
     update = MAIN.index("plex.update_playlist(")
-    execute = MAIN.index("executor.execute(pending_decisions)")
+    execute = MAIN.index("executor.execute(safe_pending_decisions)")
     assert update < execute
 
 
 def test_destructive_execute_is_guarded_by_pending_plan():
-    execute = MAIN.index("executor.execute(pending_decisions)")
+    execute = MAIN.index("executor.execute(safe_pending_decisions)")
     guard = MAIN.rfind(
         "if pending_tidal_reconciliation is not None:", 0, execute
     )
@@ -43,7 +43,7 @@ def test_destructive_execute_is_guarded_by_pending_plan():
 def test_dry_run_exits_before_plex_update_and_destructive_execute():
     dry = MAIN.index("if args.dry_run:")
     update = MAIN.index("plex.update_playlist(")
-    execute = MAIN.index("executor.execute(pending_decisions)")
+    execute = MAIN.index("executor.execute(safe_pending_decisions)")
     dry_block = MAIN[dry:update]
 
     assert dry < update < execute

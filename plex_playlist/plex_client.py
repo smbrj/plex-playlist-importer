@@ -27,6 +27,7 @@ from plexapi.exceptions import NotFound
 from plex_playlist.runtime import ComponentHealth
 
 import logging
+import time
 
 logger = logging.getLogger("plex_playlist")
 
@@ -190,6 +191,68 @@ class PlexClient:
         return exact_matches[0]
 
     
+    def trim_playlist_fifo(
+        self,
+        *,
+        name: str,
+        max_tracks: int,
+    ) -> dict[str, int]:
+        """Trim a playlist from the front until it is at or below max_tracks."""
+
+        if max_tracks < 0:
+            raise ValueError("max_tracks must be 0 or greater")
+
+        playlist = self.get_playlist(name)
+        if playlist is None:
+            raise RuntimeError(f"Playlist '{name}' does not exist")
+
+        items = list(playlist.items())
+        current = len(items)
+        if max_tracks == 0 or current <= max_tracks:
+            return {"current": current, "removed": 0, "final": current}
+
+        remove_count = current - max_tracks
+        # Use the actual playlist entry objects so duplicate occurrences remain
+        # distinct and FIFO means playlist position, not unique track identity.
+        playlist.removeItems(items[:remove_count])
+
+        # Plex may briefly return stale playlist contents immediately after
+        # removeItems(). Retry verification before declaring the trim incomplete.
+        verification_attempts = 5
+        verification_delay_seconds = 0.5
+
+        final = current
+
+        for attempt in range(verification_attempts):
+            # Re-fetch the playlist rather than reusing the PlexAPI object that
+            # performed removeItems(); that object may retain stale item state.
+            refreshed_playlist = self.get_playlist(name)
+
+            if refreshed_playlist is None:
+                raise RuntimeError(
+                    f"Playlist '{name}' disappeared while verifying trim"
+                )
+
+            final = len(list(refreshed_playlist.items()))
+
+            if final <= max_tracks:
+                break
+
+            if attempt < verification_attempts - 1:
+                time.sleep(verification_delay_seconds)
+
+        if final > max_tracks:
+            raise RuntimeError(
+                f"Playlist trim incomplete for '{name}': "
+                f"limit={max_tracks}, final={final}"
+            )
+
+        return {
+            "current": current,
+            "removed": remove_count,
+            "final": final,
+        }
+
     def update_playlist(
         self,
         #playlist_name: str,

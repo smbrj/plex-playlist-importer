@@ -93,6 +93,10 @@ from plex_playlist.tidal_account import TidalAccountClient
 from plex_playlist.tidal_companion import TidalCompanionPlaylistService
 from plex_playlist.tidal_state import TidalStateStore
 from plex_playlist.tidal_reconcile import TidalReconciliationPlanner, TidalReconcileAction, TidalReconciliationExecutor
+from plex_playlist.playlist_trim import (
+    playlist_trim_preview,
+    filter_tidal_reconciliation_for_final_plex_membership,
+)
 
 from plex_playlist.lidarr_reporting import (
     LidarrDiagnosticRow,
@@ -717,6 +721,16 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help=(
             "Read-only TIDAL account diagnostic using saved user tokens."
+        ),
+    )
+
+    parser.add_argument(
+        "--trim",
+        type=int,
+        default=None,
+        help=(
+            "Maximum final Plex playlist track count using FIFO trimming; "
+            "0 disables trimming. Overrides [playlist] trim."
         ),
     )
 
@@ -2193,6 +2207,7 @@ def run_tidal_account_test(
 # Main
 # ============================================================
 
+
 def main() -> None:
     run_started = perf_counter()
     parser = build_parser()
@@ -2249,6 +2264,18 @@ def main() -> None:
             parser.error(str(exc))
 
     cfg = load_config(args.config)
+
+    trim_limit = (
+        args.trim
+        if args.trim is not None
+        else cfg.getint("playlist", "trim", fallback=0)
+    )
+    if trim_limit < 0:
+        parser.error("--trim must be 0 or greater")
+    if trim_limit > 0 and (args.replace or args.sync):
+        parser.error(
+            "--trim cannot currently be used with --replace or --sync"
+        )
 
     #
     # setup logging from config
@@ -2521,6 +2548,34 @@ def main() -> None:
 
     if args.dry_run:
 
+        if trim_limit > 0:
+            existing_playlist = plex.get_playlist(playlist_name)
+            current_rating_keys = (
+                [int(item.ratingKey) for item in existing_playlist.items()]
+                if existing_playlist is not None
+                else []
+            )
+            requested_rating_keys = [
+                int(result.matched.rating_key)
+                for result in session.results
+                if result.matched is not None
+            ]
+            trim_preview = playlist_trim_preview(
+                current_rating_keys=current_rating_keys,
+                requested_rating_keys=requested_rating_keys,
+                trim_limit=trim_limit,
+            )
+            logger.info(
+                "Playlist trim preview: current=%d; new_unique=%d; "
+                "after_update=%d; would_remove=%d; final=%d; limit=%d",
+                trim_preview["current"],
+                trim_preview["new_unique"],
+                trim_preview["after_update"],
+                trim_preview["remove"],
+                trim_preview["final"],
+                trim_limit,
+            )
+
         run_status.playlist_state = "DRY RUN"
         if pending_tidal_reconciliation is not None:
             logger.info(
@@ -2656,6 +2711,27 @@ def main() -> None:
         mode=mode,
     )
 
+    if trim_limit > 0:
+        try:
+            trim_result = plex.trim_playlist_fifo(
+                name=playlist_name,
+                max_tracks=trim_limit,
+            )
+            logger.info(
+                "Playlist trim summary: limit=%d; removed=%d; final=%d",
+                trim_limit,
+                trim_result["removed"],
+                trim_result["final"],
+            )
+        except Exception as exc:
+            warning = (
+                "Playlist update succeeded but FIFO trim failed: "
+                f"limit={trim_limit}; {exc}"
+            )
+            logger.warning(warning)
+            run_status.warnings.append(warning)
+
+
     run_status.playlist_state = (
         "UPDATED WITH WARNINGS"
         if run_status.stale_plex_matches
@@ -2668,11 +2744,26 @@ def main() -> None:
             pending_state_db,
             pending_decisions,
         ) = pending_tidal_reconciliation
+        pending_state_store = TidalStateStore(pending_state_db)
+        final_playlist = plex.get_playlist(playlist_name)
+        final_playlist_items = (
+            list(final_playlist.items())
+            if final_playlist is not None
+            else []
+        )
+        safe_pending_decisions = (
+            filter_tidal_reconciliation_for_final_plex_membership(
+                decisions=pending_decisions,
+                state_store=pending_state_store,
+                playlist_items=final_playlist_items,
+                artist_aliases=config.artist_aliases,
+            )
+        )
         executor = TidalReconciliationExecutor(
             client=pending_account_client,
-            state_store=TidalStateStore(pending_state_db),
+            state_store=pending_state_store,
         )
-        execution = executor.execute(pending_decisions)
+        execution = executor.execute(safe_pending_decisions)
         logger.info(
             "TIDAL reconciliation applied after confirmed Plex update: "
             "playlist_removed=%d; favorites_removed=%d; "

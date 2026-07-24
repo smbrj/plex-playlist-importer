@@ -68,5 +68,5 @@ def test_temporary_cp016_ownership_cli_is_not_present():
 def test_tidal_destructive_handoff_is_post_plex_update_only():
     main = _main_source()
     assert main.index("plex.update_playlist(") < main.index(
-        "executor.execute(pending_decisions)"
+        "executor.execute(safe_pending_decisions)"
     )
