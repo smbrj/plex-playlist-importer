@@ -52,8 +52,11 @@ delete_old_files() {
 # Per-run debug logs are timestamped and otherwise unbounded.
 delete_old_files "$ROOT/logs/runs" "*.log"
 
-# TIDAL matched reports are timestamped and otherwise accumulate.
+# TIDAL matched/unmatched reports are timestamped and otherwise accumulate.
+# Keep the legacy '=' pattern so reports created before CP025 still age out.
 delete_old_files "$ROOT/reports" "tidal-matched=*.csv"
+delete_old_files "$ROOT/reports" "tidal-matched-*.csv"
+delete_old_files "$ROOT/reports" "tidal-unmatched-*.csv"
 
 if (( DRY_RUN )); then
     echo "Dry run complete: $deleted file(s) eligible for deletion."

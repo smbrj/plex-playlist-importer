@@ -4,7 +4,11 @@ from dataclasses import dataclass
 import re
 
 from plex_playlist.tidal_cache import TidalSearchCache
-from plex_playlist.tidal_client import TidalClient, TidalTrackCandidate
+from plex_playlist.tidal_client import (
+    TidalClient,
+    TidalHydrationFailure,
+    TidalTrackCandidate,
+)
 from plex_playlist.tidal_matcher import choose_tidal_match
 
 
@@ -30,6 +34,13 @@ def tidal_requested_title(title: str) -> str:
 class TidalResolution:
     matched: TidalTrackCandidate | None
     source: str  # "cache" or "api"
+    search_title: str
+    candidates: tuple[TidalTrackCandidate, ...] = ()
+    hydration_failures: tuple[TidalHydrationFailure, ...] = ()
+
+    @property
+    def inconclusive(self) -> bool:
+        return self.matched is None and bool(self.hydration_failures)
 
 
 class TidalSearchService:
@@ -64,9 +75,14 @@ class TidalSearchService:
                 return TidalResolution(
                     matched=lookup.matched,
                     source="cache",
+                    search_title=search_title,
+                    candidates=(),
                 )
 
         candidates = self.client.search_tracks(artist, search_title)
+        hydration_failures = tuple(
+            getattr(self.client, "last_hydration_failures", ()) or ()
+        )
         decision = choose_tidal_match(
             requested_artist=artist,
             requested_title=search_title,
@@ -85,7 +101,7 @@ class TidalSearchService:
                     aliases=self.artist_aliases,
                     allow_explicit=self.allow_explicit,
                 )
-            else:
+            elif not hydration_failures:
                 self.cache.put_no_match(
                     artist,
                     search_title,
@@ -96,4 +112,7 @@ class TidalSearchService:
         return TidalResolution(
             matched=decision.matched,
             source="api",
+            search_title=search_title,
+            candidates=tuple(candidates),
+            hydration_failures=hydration_failures,
         )

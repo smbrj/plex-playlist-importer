@@ -81,7 +81,11 @@ from plex_playlist.tidal_matcher import qualifying_candidates
 from plex_playlist.tidal_diagnostics import format_tidal_search_results
 from plex_playlist.tidal_cache import TidalSearchCache
 from plex_playlist.tidal_service import TidalSearchService
-from plex_playlist.tidal_reporting import write_tidal_matched_report
+from plex_playlist.tidal_reporting import (
+    build_tidal_unmatched_rows,
+    write_tidal_matched_report,
+    write_tidal_unmatched_report,
+)
 from plex_playlist.tidal_config import parse_quality_preference
 from plex_playlist.tidal_user_auth import (
     TidalTokenStore,
@@ -1509,6 +1513,10 @@ def run_tidal_search_diagnostic(
         client_secret=client_secret,
         country_code=tidal_cfg.get("country_code", "US"),
         timeout=tidal_cfg.getfloat("timeout", fallback=20.0),
+        hydration_delay_seconds=tidal_cfg.getfloat(
+            "hydration_delay_seconds",
+            fallback=0.25,
+        ),
     )
 
     try:
@@ -1581,6 +1589,10 @@ def run_tidal_unmatched_resolution(
         client_secret=client_secret,
         country_code=tidal_cfg.get("country_code", "US"),
         timeout=tidal_cfg.getfloat("timeout", fallback=20.0),
+        hydration_delay_seconds=tidal_cfg.getfloat(
+            "hydration_delay_seconds",
+            fallback=0.25,
+        ),
     )
 
     cache = None
@@ -1645,17 +1657,41 @@ def run_tidal_unmatched_resolution(
     matched_track_ids: list[str] = []
     matched_track_metadata: dict[str, tuple[str, str, str]] = {}
     matched_candidates = []
+    unmatched_diagnostic_rows = []
 
     for entry in unmatched:
         resolution = service.resolve(entry.artist, entry.title)
         searched_count += 1
 
         if resolution.matched is None:
-            logger.info(
-                "TIDAL no match: %s - %s (%s)",
-                entry.artist,
-                entry.title,
-                resolution.source,
+            if resolution.inconclusive:
+                failed_ids = ",".join(
+                    failure.track_id
+                    for failure in resolution.hydration_failures
+                )
+                logger.warning(
+                    "TIDAL resolution inconclusive: %s - %s; "
+                    "candidate hydration failed for track(s) %s; "
+                    "NO_MATCH was not cached",
+                    entry.artist,
+                    entry.title,
+                    failed_ids or "<unknown>",
+                )
+            else:
+                logger.info(
+                    "TIDAL no match: %s - %s (%s)",
+                    entry.artist,
+                    entry.title,
+                    resolution.source,
+                )
+            unmatched_diagnostic_rows.extend(
+                build_tidal_unmatched_rows(
+                    requested_artist=entry.artist,
+                    requested_title=entry.title,
+                    resolution=resolution,
+                    artist_aliases=matching_config.artist_aliases,
+                    allow_explicit=allow_explicit,
+                )
             )
             continue
 
@@ -1699,6 +1735,16 @@ def run_tidal_unmatched_resolution(
     )
     if tidal_match_report is not None:
         logger.info("TIDAL matched-track report written: %s", tidal_match_report)
+
+    tidal_unmatched_report = write_tidal_unmatched_report(
+        rows=unmatched_diagnostic_rows,
+        reports_directory=reports_directory,
+    )
+    if tidal_unmatched_report is not None:
+        logger.info(
+            "TIDAL unmatched-track report written: %s",
+            tidal_unmatched_report,
+        )
 
     companion_detail = "no companion update required"
     pending_reconciliation = None

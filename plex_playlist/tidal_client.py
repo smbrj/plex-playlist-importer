@@ -38,6 +38,12 @@ class TidalTrackCandidate:
     explicit: bool = False
 
 
+@dataclass(frozen=True)
+class TidalHydrationFailure:
+    track_id: str
+    error: str
+
+
 class TidalClient:
     """Minimal read-only client for Phase 1 TIDAL catalogue access."""
 
@@ -51,6 +57,7 @@ class TidalClient:
         session: requests.Session | None = None,
         auth_url: str = AUTH_URL,
         api_base_url: str = API_BASE_URL,
+        hydration_delay_seconds: float = 0.25,
     ) -> None:
         if not client_id.strip():
             raise ValueError("TIDAL client_id is required")
@@ -64,9 +71,13 @@ class TidalClient:
         self.session = session or requests.Session()
         self.auth_url = auth_url.rstrip("/")
         self.api_base_url = api_base_url.rstrip("/")
+        if hydration_delay_seconds < 0:
+            raise ValueError("TIDAL hydration_delay_seconds cannot be negative")
+        self.hydration_delay_seconds = float(hydration_delay_seconds)
 
         self._access_token: str | None = None
         self._token_expires_at: float = 0.0
+        self.last_hydration_failures: tuple[TidalHydrationFailure, ...] = ()
 
     def _get_access_token(self) -> str:
         # Refresh a little early to avoid expiring during a request.
@@ -155,20 +166,34 @@ class TidalClient:
 
         requested_title_key = normalize_title(title)
         hydrated: list[TidalTrackCandidate] = []
+        hydration_failures: list[TidalHydrationFailure] = []
+        self.last_hydration_failures = ()
 
+        hydration_count = 0
         for candidate in sparse_candidates:
             if normalize_title(candidate.title) != requested_title_key:
                 hydrated.append(candidate)
                 continue
 
+            if hydration_count > 0 and self.hydration_delay_seconds > 0:
+                time.sleep(self.hydration_delay_seconds)
+            hydration_count += 1
+
             try:
                 hydrated.append(self.get_track(candidate.track_id))
-            except TidalRequestError:
-                # Preserve the search result for diagnostics if a detail lookup
-                # fails; strict matching will reject it when artist metadata is
-                # unavailable.
+            except TidalRequestError as exc:
+                # Preserve the sparse search result for diagnostics, but record
+                # that the catalogue lookup is incomplete. Callers must not
+                # negative-cache a NO_MATCH derived from incomplete hydration.
+                hydration_failures.append(
+                    TidalHydrationFailure(
+                        track_id=candidate.track_id,
+                        error=str(exc),
+                    )
+                )
                 hydrated.append(candidate)
 
+        self.last_hydration_failures = tuple(hydration_failures)
         return hydrated
 
 

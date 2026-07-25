@@ -50,10 +50,19 @@ try {
         -Directory (Join-Path $Root "logs\runs") `
         -Filter "*.log"
 
-    # Timestamped TIDAL matched reports are disposable after the retention period.
+    # Timestamped TIDAL matched/unmatched reports are disposable after the retention period.
+    # Keep the legacy '=' pattern so reports created before CP025 still age out.
     Remove-OldPpiFiles `
         -Directory (Join-Path $Root "reports") `
         -Filter "tidal-matched=*.csv"
+
+    Remove-OldPpiFiles `
+        -Directory (Join-Path $Root "reports") `
+        -Filter "tidal-matched-*.csv"
+
+    Remove-OldPpiFiles `
+        -Directory (Join-Path $Root "reports") `
+        -Filter "tidal-unmatched-*.csv"
 
     if ($DryRun) {
         Write-Host "Dry run complete: $EligibleCount file(s) eligible for deletion."
