@@ -1,31 +1,36 @@
+# Local configuration and credentials
+config.ini
+*.local.ini
+.env
+.env.*
+!.env.example
+
+# TIDAL/user authorization
+cache/tidal_user_tokens.json
+
+# Python bytecode and caches
 __pycache__/
-*.pyc
-logs/**
-cache/**
-audit/**
-reports/**
-# Python
 *.py[cod]
 *$py.class
-.pytest_cache
-*.egg-info
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
 
 # Virtual environments
 .venv/
 venv/
 env/
 
-# Test and tooling caches
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-.coverage
-htmlcov/
+# Build and packaging output
+build/
+dist/
+*.egg-info/
+.eggs/
 
-# Local configuration and credentials
-config.ini
-
-# SQLite cache
+# Runtime state/databases
 cache/
 *.db
 *.db-shm
@@ -38,17 +43,14 @@ logs/
 *.log
 
 # Generated reports
-reports/
+reports/*
+!reports/.gitkeep
 playlist_report.csv
 unmatched.csv
 duplicates.csv
 
-# Local playlist inputs and scratch data
-playlist.txt
-playlist.csv
-playlist.tsv
-playlist.m3u
-
+# Local playlist inputs / scratch files
+playlist.local.*
 
 # IDE/editor
 .vscode/
@@ -56,7 +58,11 @@ playlist.m3u
 *.swp
 *.swo
 
-# OS metadata
+# Operating-system metadata
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Local audit/checkpoint archives
+*_audit.zip
+*_checkpoint.zip
