@@ -1,4 +1,0 @@
-plexapi
-rapidfuzz
-requests
-tqdm
