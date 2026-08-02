@@ -31,7 +31,7 @@ Automatically build and maintain Plex playlists from recent SiriusXM channel his
 
 The XMPlaylist integration retrieves recently played songs, removes duplicates, matches them against the Plex library, and builds continuously refreshed playlists designed to maximize listening variety.
 
-See **XMPLAYLIST.md** for complete setup and operational information.
+See [XMPLAYLIST.md](XMPLAYLIST.md). for complete setup and operational information.
 
 ---
 
@@ -43,7 +43,7 @@ When Plex cannot match a requested track, PPI can optionally submit the correspo
 
 Lidarr operates asynchronously and integrates naturally with existing download and Plex library workflows.
 
-See **LIDARR.md** for complete configuration and operational details.
+See [LIDARR.md](LIDARR.md). for complete configuration and operational details.
 
 ---
 
@@ -55,7 +55,7 @@ When enabled, PPI creates and maintains matching TIDAL companion playlists while
 
 The TIDAL integration includes configurable quality selection, conservative playlist reconciliation, search caching, and detailed diagnostic reporting.
 
-See **TIDAL.md** for complete setup and usage instructions.
+See [TIDAL.md](TIDAL.md). for complete setup and usage instructions.
 
 ---
 
@@ -63,10 +63,10 @@ See **TIDAL.md** for complete setup and usage instructions.
 
 Additional documentation is provided with the project:
 
-* **INSTALLATION.md** — Installation and platform setup
-* **XMPLAYLIST.md** — XMPlaylist integration
-* **LIDARR.md** — Lidarr integration
-* **TIDAL.md** — TIDAL integration
+* [INSTALLATION.md](INSTALLATION.md).  — Installation and platform setup
+* [XMPLAYLIST.md](XMPLAYLIST.md). — XMPlaylist integration
+* [LIDARR.md](LIDARR.md). — Lidarr integration
+* [TIDAL.md](TIDAL.md). — TIDAL integration
 
 ---
 
