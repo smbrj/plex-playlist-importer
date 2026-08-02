@@ -6,17 +6,6 @@ plexapi>=4.17.0
 
 rapidfuzz>=3.9.0
 
-# Progress bars
-
-tqdm>=4.66.0
-
-# Rich console output
-
-rich>=13.9.0
-
-# HTML reporting
-
-jinja2>=3.1.4
 
 # CSV/DataFrame support
 

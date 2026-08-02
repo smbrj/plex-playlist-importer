@@ -4,14 +4,27 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "plex-playlist-importer"
-version = "1.0.0"
+version = "0.1.0b1"
 description = "Fuzzy playlist importer for Plex Media Server"
 requires-python = ">=3.11"
+readme = "README.md"
+license = "Apache-2.0"
+license-files = "LICENSE*"
+packages = [
+  { include = "plex-playlist-importer" }
+]
 
 dependencies = [
-    "plexapi",
-    "rapidfuzz",
-    "requests",
+    "plexapi>=4.17.0",
+    "rapidfuzz>=3.9.0",
+    "pandas>=2.2.3",
+    "sqlalchemy>=2.0.36",
+    "typer>=0.15.1",
+    "pytest>=8.3.4",
+    "mypy>=1.14.0",
+    "black>=24.10.0",
+    "ruff>=0.8.4",
+    "requests>=2.32.0",
 ]
 
 [tool.setuptools.packages.find]
@@ -21,3 +34,7 @@ exclude = ["tests", "tests.*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[project.scripts]
+ppi = "plex-playlist-importer-v2:main"
+
