@@ -4,8 +4,12 @@ This document contains installation and operational procedures that have
 been verified for the Plex Playlist Importer (PPI) production
 environment.
 
-It intentionally does not document unverified or deferred procedures
-such as installing or updating PPI from GitHub.
+This document contains the verified installation, configuration, and 
+operational procedures for Plex Playlist Importer (PPI). While the examples
+focus on the verified Unraid production environment, PPI is platform 
+independent and can be installed on any supported operating system 
+with Python.
+
 
 ## Platform Support
 
@@ -41,6 +45,70 @@ mode `755` to remain compatible with other applications under
 `/mnt/user/appdata`.
 
 Unraid User Scripts executes scheduled PPI jobs as `root`.
+
+## 2. Obtaining PPI
+
+PPI is distributed through the project's GitHub repository.
+
+Clone the repository:
+
+```bash
+git clone https://github.com/smbrj/plex-playlist-importer.git
+cd plex-playlist-importer
+```
+
+Alternatively, download the current source archive from the GitHub project page and extract it into the desired installation directory.
+
+After obtaining the source, continue with the platform-specific installation instructions below.
+
+### Windows
+
+Create and activate a Python virtual environment:
+
+```powershell
+python -m venv venv
+.\venv\Scripts\Activate.ps1
+```
+
+Install the required dependencies:
+
+```powershell
+pip install -r requirements.txt
+```
+
+Create your working configuration:
+
+```powershell
+copy config.example.ini config.ini
+```
+
+Edit `config.ini` with the appropriate settings for your Plex server and any optional integrations you intend to use.
+
+### Linux / Unraid
+
+Create and activate a Python virtual environment:
+
+```bash
+python -m venv venv
+source venv/bin/activate
+```
+
+Install the required dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+Create the working configuration:
+
+```bash
+cp config.example.ini config.ini
+```
+
+Edit `config.ini` with the appropriate settings for your Plex server and any optional integrations you intend to use.
+
+After the initial configuration is complete, continue with the installation and validation procedures described in the following sections.
+
 
 ## 2. Unraid Prerequisites
 
