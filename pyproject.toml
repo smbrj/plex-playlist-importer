@@ -36,5 +36,4 @@ exclude = ["tests", "tests.*"]
 testpaths = ["tests"]
 
 [project.scripts]
-ppi = "plex-playlist-importer-v2:main"
-
+ppi = "playlist_import_v2:main"
