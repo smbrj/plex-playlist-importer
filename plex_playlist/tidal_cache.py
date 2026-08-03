@@ -7,6 +7,7 @@ from pathlib import Path
 
 from plex_playlist.normalization import canonical_artist_key, normalize_title
 from plex_playlist.tidal_client import TidalTrackCandidate
+from plex_playlist.rejected_terms import parse_rejected_terms
 
 
 @dataclass(frozen=True)
@@ -70,12 +71,19 @@ class TidalSearchCache:
         title: str,
         aliases: dict[str, str] | None = None,
         allow_explicit: bool | None = None,
+        rejected_terms: tuple[str, ...] | list[str] | None = None,
     ) -> tuple[str, str]:
         title_key = normalize_title(title)
         if allow_explicit is not None:
             title_key = (
                 f"{title_key}\x1fallow_explicit="
                 f"{1 if allow_explicit else 0}"
+            )
+        normalized_rejections = parse_rejected_terms(rejected_terms)
+        if normalized_rejections:
+            title_key = (
+                f"{title_key}\x1frejected_terms="
+                + "|".join(normalized_rejections)
             )
         return (
             canonical_artist_key(artist, aliases or {}),
@@ -90,9 +98,10 @@ class TidalSearchCache:
         aliases: dict[str, str] | None = None,
         now: datetime | None = None,
         allow_explicit: bool | None = None,
+        rejected_terms: tuple[str, ...] | list[str] | None = None,
     ) -> TidalCacheLookup:
         artist_key, title_key = self._keys(
-            artist, title, aliases, allow_explicit
+            artist, title, aliases, allow_explicit, rejected_terms
         )
         now = now or datetime.now(timezone.utc)
 
@@ -146,6 +155,7 @@ class TidalSearchCache:
         aliases: dict[str, str] | None = None,
         now: datetime | None = None,
         allow_explicit: bool | None = None,
+        rejected_terms: tuple[str, ...] | list[str] | None = None,
     ) -> None:
         self._put(
             requested_artist,
@@ -155,6 +165,7 @@ class TidalSearchCache:
             aliases=aliases,
             now=now,
             allow_explicit=allow_explicit,
+            rejected_terms=rejected_terms,
         )
 
     def put_no_match(
@@ -165,6 +176,7 @@ class TidalSearchCache:
         aliases: dict[str, str] | None = None,
         now: datetime | None = None,
         allow_explicit: bool | None = None,
+        rejected_terms: tuple[str, ...] | list[str] | None = None,
     ) -> None:
         self._put(
             requested_artist,
@@ -174,6 +186,7 @@ class TidalSearchCache:
             aliases=aliases,
             now=now,
             allow_explicit=allow_explicit,
+            rejected_terms=rejected_terms,
         )
 
     def _put(
@@ -186,12 +199,14 @@ class TidalSearchCache:
         aliases: dict[str, str] | None,
         now: datetime | None,
         allow_explicit: bool | None,
+        rejected_terms: tuple[str, ...] | list[str] | None,
     ) -> None:
         artist_key, title_key = self._keys(
             requested_artist,
             requested_title,
             aliases,
             allow_explicit,
+            rejected_terms,
         )
         now = now or datetime.now(timezone.utc)
         expires_at = now + timedelta(hours=self.max_age_hours)

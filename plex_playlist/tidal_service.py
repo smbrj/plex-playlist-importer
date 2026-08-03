@@ -54,12 +54,14 @@ class TidalSearchService:
         artist_aliases: dict[str, str] | None = None,
         quality_preference: tuple[str, ...] | list[str] | None = None,
         allow_explicit: bool = True,
+        rejected_terms: tuple[str, ...] | list[str] | None = None,
     ) -> None:
         self.client = client
         self.cache = cache
         self.artist_aliases = artist_aliases or {}
         self.quality_preference = quality_preference
         self.allow_explicit = bool(allow_explicit)
+        self.rejected_terms = tuple(rejected_terms or ())
 
     def resolve(self, artist: str, title: str) -> TidalResolution:
         search_title = tidal_requested_title(title)
@@ -70,6 +72,7 @@ class TidalSearchService:
                 search_title,
                 aliases=self.artist_aliases,
                 allow_explicit=self.allow_explicit,
+                rejected_terms=self.rejected_terms,
             )
             if lookup.found:
                 return TidalResolution(
@@ -90,6 +93,7 @@ class TidalSearchService:
             artist_aliases=self.artist_aliases,
             quality_preference=self.quality_preference,
             allow_explicit=self.allow_explicit,
+            rejected_terms=self.rejected_terms,
         )
 
         if self.cache is not None:
@@ -100,6 +104,7 @@ class TidalSearchService:
                     decision.matched,
                     aliases=self.artist_aliases,
                     allow_explicit=self.allow_explicit,
+                    rejected_terms=self.rejected_terms,
                 )
             elif not hydration_failures:
                 self.cache.put_no_match(
@@ -107,6 +112,7 @@ class TidalSearchService:
                     search_title,
                     aliases=self.artist_aliases,
                     allow_explicit=self.allow_explicit,
+                    rejected_terms=self.rejected_terms,
                 )
 
         return TidalResolution(

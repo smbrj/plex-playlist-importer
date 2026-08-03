@@ -139,6 +139,7 @@ def build_tidal_unmatched_rows(
     resolution: object,
     artist_aliases: Mapping[str, str] | None = None,
     allow_explicit: bool = True,
+    rejected_terms: tuple[str, ...] | list[str] | None = None,
 ) -> list[TidalUnmatchedDiagnosticRow]:
     """Build diagnostic rows for one TIDAL resolution that did not match."""
     if getattr(resolution, "matched", None) is not None:
@@ -211,6 +212,7 @@ def build_tidal_unmatched_rows(
             candidate=candidate,
             artist_aliases=artist_aliases,
             allow_explicit=allow_explicit,
+            rejected_terms=rejected_terms,
         )
         rows.append(
             TidalUnmatchedDiagnosticRow(

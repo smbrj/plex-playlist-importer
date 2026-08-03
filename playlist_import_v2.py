@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import glob
 import configparser
 import logging
 import sys
@@ -87,6 +88,7 @@ from plex_playlist.tidal_reporting import (
     write_tidal_unmatched_report,
 )
 from plex_playlist.tidal_config import parse_quality_preference
+from plex_playlist.rejected_terms import parse_rejected_terms
 from plex_playlist.tidal_user_auth import (
     TidalTokenStore,
     TidalUserTokenProvider,
@@ -245,6 +247,18 @@ def build_matching_config(
         ).split(",")
         if value.strip()
     ]
+    rejected_terms = parse_rejected_terms(
+        match_cfg.get("rejected_terms", fallback="")
+    )
+    normalized_preferred = set(parse_rejected_terms(preferred_versions))
+    overlap = sorted(normalized_preferred.intersection(rejected_terms))
+    if overlap:
+        logger.warning(
+            "Matching configuration overlap: %s appear in both "
+            "preferred_versions and rejected_terms; rejected_terms "
+            "takes precedence",
+            ", ".join(repr(value) for value in overlap),
+        )
 
     return MatchingConfig(
         threshold=match_cfg.getfloat("threshold", 85),
@@ -254,6 +268,7 @@ def build_matching_config(
         title_weight=match_cfg.getfloat("title_weight", 0.45),
         combined_weight=match_cfg.getfloat("combined_weight", 0.15),
         preferred_versions=preferred_versions,
+        rejected_terms=rejected_terms,
         min_title_score=match_cfg.getfloat("min_title_score", 95),
         fallback_title_score=match_cfg.getfloat("fallback_title_score", 80),
         debug=logging_cfg.getboolean("debug", False),
@@ -857,8 +872,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     intelligence.add_argument(
         "--suggest-aliases",
-        action="store_true",
-        help="Generate alias suggestions from the unmatched CSV",
+        nargs="*",
+        metavar="CSV_OR_GLOB",
+        default=None,
+        help=(
+            "Generate alias suggestions from the configured unmatched CSV, "
+            "or from one or more explicit CSV paths/glob patterns"
+        ),
     )
     intelligence.add_argument(
         "--alias-suggestions-output",
@@ -1042,6 +1062,7 @@ def run_lidarr_diagnostics(
     search_missing_albums: bool = False,
     client: LidarrClient | None = None,
     config_path: Path = Path("config.ini"),
+    rejected_terms: tuple[str, ...] | list[str] | None = None,
 ) -> list[LidarrDiagnosticRow]:
     """
     Check Plex-unmatched entries against Lidarr and write a CSV report.
@@ -1184,6 +1205,7 @@ def run_lidarr_diagnostics(
         remember_searches=remember_searches,
         retry_after_days=retry_after_days,
         progress_callback=log_progress,
+        rejected_terms=rejected_terms,
     )
 
     write_lidarr_diagnostic_csv(
@@ -1405,6 +1427,46 @@ def record_alias_effectiveness(
     )
 
 
+
+def resolve_alias_suggestion_inputs(
+    patterns: list[str] | None,
+    *,
+    default_path: Path,
+) -> list[Path]:
+    """Resolve explicit alias-input paths/globs or use the configured default."""
+
+    if not patterns:
+        candidates = [Path(default_path)]
+    else:
+        candidates: list[Path] = []
+        for pattern in patterns:
+            matches = [Path(value) for value in glob.glob(pattern)]
+            if not matches:
+                raise RuntimeError(
+                    f"Alias suggestion input matched no files: {pattern}"
+                )
+            candidates.extend(matches)
+
+    resolved: dict[str, Path] = {}
+    for candidate in candidates:
+        path = candidate.expanduser()
+        if not path.exists():
+            raise RuntimeError(
+                f"Alias suggestion input file not found: {path}"
+            )
+        if not path.is_file():
+            raise RuntimeError(
+                f"Alias suggestion input is not a file: {path}"
+            )
+        if path.suffix.casefold() != ".csv":
+            raise RuntimeError(
+                f"Alias suggestion input must be a CSV file: {path}"
+            )
+        absolute = path.resolve()
+        resolved[str(absolute).casefold()] = absolute
+
+    return sorted(resolved.values(), key=lambda value: str(value).casefold())
+
 def run_library_intelligence(
     *,
     args,
@@ -1413,7 +1475,7 @@ def run_library_intelligence(
 ) -> bool:
     requested = any([
         args.export_artists,
-        args.suggest_aliases,
+        args.suggest_aliases is not None,
         args.import_aliases is not None,
         args.audit_aliases,
     ])
@@ -1434,17 +1496,22 @@ def run_library_intelligence(
             len(rows),
         )
 
-    if args.suggest_aliases:
+    if args.suggest_aliases is not None:
+        input_paths = resolve_alias_suggestion_inputs(
+            args.suggest_aliases,
+            default_path=args.unmatched,
+        )
         rows = suggest_aliases_csv(
-            unmatched_csv=args.unmatched,
+            unmatched_csv=input_paths,
             tracks=tracks,
             aliases_path=aliases_path,
             output_path=args.alias_suggestions_output,
         )
         logger.info(
-            "Alias suggestions written: %s (%d rows)",
+            "Alias suggestions written: %s (%d rows from %d input file(s))",
             args.alias_suggestions_output,
             len(rows),
+            len(input_paths),
         )
 
     if args.import_aliases is not None:
@@ -1535,6 +1602,7 @@ def run_tidal_search_diagnostic(
         candidates=candidates,
         artist_aliases=matching_config.artist_aliases,
         allow_explicit=allow_explicit,
+        rejected_terms=matching_config.rejected_terms,
     )
 
     print(
@@ -1545,6 +1613,7 @@ def run_tidal_search_diagnostic(
             accepted=accepted,
             artist_aliases=matching_config.artist_aliases,
             allow_explicit=allow_explicit,
+            rejected_terms=matching_config.rejected_terms,
         )
     )
 
@@ -1644,6 +1713,7 @@ def run_tidal_unmatched_resolution(
         artist_aliases=matching_config.artist_aliases,
         quality_preference=quality_config.values,
         allow_explicit=allow_explicit,
+        rejected_terms=matching_config.rejected_terms,
     )
 
     unmatched = [
@@ -1691,6 +1761,7 @@ def run_tidal_unmatched_resolution(
                     resolution=resolution,
                     artist_aliases=matching_config.artist_aliases,
                     allow_explicit=allow_explicit,
+                    rejected_terms=matching_config.rejected_terms,
                 )
             )
             continue
@@ -2552,6 +2623,7 @@ def main() -> None:
                 search_missing_albums=args.lidarr_search,
                 client=lidarr_client,
                 config_path=args.config,
+                rejected_terms=matching_config.rejected_terms,
             )
             run_status.lidarr = ComponentHealth.available_health(
                 "completed"

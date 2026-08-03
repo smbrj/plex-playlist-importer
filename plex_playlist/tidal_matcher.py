@@ -9,6 +9,7 @@ from plex_playlist.normalization import (
     normalize_title,
 )
 from plex_playlist.tidal_client import TidalTrackCandidate
+from plex_playlist.rejected_terms import rejected_term_reason
 
 
 ACCEPTABLE_STUDIO_VERSIONS = {
@@ -42,6 +43,7 @@ def qualifying_candidates(
     candidates: list[TidalTrackCandidate],
     artist_aliases: Mapping[str, str] | None = None,
     allow_explicit: bool = True,
+    rejected_terms: tuple[str, ...] | list[str] | None = None,
 ) -> list[TidalTrackCandidate]:
     aliases = artist_aliases or {}
 
@@ -54,6 +56,14 @@ def qualifying_candidates(
     accepted: list[TidalTrackCandidate] = []
 
     for candidate in candidates:
+        if rejected_term_reason(
+            title=candidate.title,
+            album=candidate.album,
+            version=candidate.version,
+            rejected_terms=rejected_terms,
+        ) is not None:
+            continue
+
         if not candidate.artist:
             continue
 
@@ -88,8 +98,18 @@ def tidal_candidate_rejection_reason(
     candidate: TidalTrackCandidate,
     artist_aliases: Mapping[str, str] | None = None,
     allow_explicit: bool = True,
+    rejected_terms: tuple[str, ...] | list[str] | None = None,
 ) -> str | None:
     aliases = artist_aliases or {}
+
+    configured_rejection = rejected_term_reason(
+        title=candidate.title,
+        album=candidate.album,
+        version=candidate.version,
+        rejected_terms=rejected_terms,
+    )
+    if configured_rejection is not None:
+        return configured_rejection
 
     if not candidate.artist:
         return "artist metadata missing"
@@ -157,6 +177,7 @@ def choose_tidal_match(
     artist_aliases: Mapping[str, str] | None = None,
     quality_preference: tuple[str, ...] | list[str] | None = None,
     allow_explicit: bool = True,
+    rejected_terms: tuple[str, ...] | list[str] | None = None,
 ) -> TidalMatchDecision:
     accepted = qualifying_candidates(
         requested_artist=requested_artist,
@@ -164,6 +185,7 @@ def choose_tidal_match(
         candidates=candidates,
         artist_aliases=artist_aliases,
         allow_explicit=allow_explicit,
+        rejected_terms=rejected_terms,
     )
 
     if not accepted:
