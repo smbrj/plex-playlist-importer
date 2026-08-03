@@ -7,6 +7,7 @@ from typing import Any
 from plex_playlist.lidarr_client import LidarrClient
 from plex_playlist.lidarr_search_history import LidarrSearchHistoryStore
 from plex_playlist.normalization import normalize_artist, normalize_title
+from plex_playlist.rejected_terms import rejected_term_reason
 
 logger = logging.getLogger("plex_playlist")
 
@@ -23,6 +24,7 @@ SEARCH_COMPLETED_FILE_AVAILABLE = "SEARCH_COMPLETED_FILE_AVAILABLE"
 SEARCH_COMPLETED_NO_FILE = "SEARCH_COMPLETED_NO_FILE"
 SEARCH_FAILED = "SEARCH_FAILED"
 SEARCH_STATUS_UNAVAILABLE = "SEARCH_STATUS_UNAVAILABLE"
+REJECTED_BY_CONFIGURATION = "REJECTED_BY_CONFIGURATION"
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,11 +59,13 @@ class LidarrAcquisitionService:
         history_store: LidarrSearchHistoryStore | None = None,
         remember_searches: bool = True,
         retry_after_days: float = 7.0,
+        rejected_terms: tuple[str, ...] | list[str] | None = None,
     ) -> None:
         self.client = client
         self.history_store = history_store
         self.remember_searches = remember_searches
         self.retry_after_days = retry_after_days
+        self.rejected_terms = tuple(rejected_terms or ())
         self.lookup_cache: dict[str, list[dict[str, Any]]] = {}
         self.managed_cache: dict[str, dict[str, Any] | None] = {}
         self.artist_media_cache: dict[int, tuple[list[dict[str, Any]], list[dict[str, Any]]]] = {}
@@ -103,6 +107,23 @@ class LidarrAcquisitionService:
         wait_for_search_seconds: float = 0.0,
         search_poll_interval_seconds: float = 2.0,
     ) -> LidarrSearchDecision:
+        configured_rejection = rejected_term_reason(
+            title=_track_title(resolution.found_track),
+            album=_album_title(resolution.found_album),
+            version=str(
+                (resolution.found_track or {}).get("version", "") or ""
+            ),
+            rejected_terms=self.rejected_terms,
+        )
+        if configured_rejection is not None:
+            return LidarrSearchDecision(
+                False,
+                None,
+                "",
+                REJECTED_BY_CONFIGURATION,
+                configured_rejection,
+            )
+
         if resolution.found_track is None:
             return LidarrSearchDecision(
                 False, None, "", TRACK_NOT_IN_LIDARR_METADATA,

@@ -159,6 +159,7 @@ def build_lidarr_diagnostics(
     remember_searches: bool = True,
     retry_after_days: float = 7.0,
     progress_callback: Callable[[int, int, Any], None] | None = None,
+    rejected_terms: tuple[str, ...] | list[str] | None = None,
 ) -> list[LidarrDiagnosticRow]:
     # Expected Lidarr request failures are isolated to one entry.
     # Unexpected programming errors still propagate.
@@ -168,6 +169,7 @@ def build_lidarr_diagnostics(
         history_store=history_store,
         remember_searches=remember_searches,
         retry_after_days=retry_after_days,
+        rejected_terms=rejected_terms,
     )
     rows: list[LidarrDiagnosticRow] = []
     unmatched_results = [

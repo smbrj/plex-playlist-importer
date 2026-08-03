@@ -180,6 +180,8 @@ class MatchingConfig:
 
     artist_aliases: dict[str, str] = field(default_factory=dict)
 
+    rejected_terms: tuple[str, ...] = ()
+
     preferred_versions: list[str] = field(
     default_factory=lambda: [
         "studio",

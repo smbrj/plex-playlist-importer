@@ -88,6 +88,7 @@ from plex_playlist.tidal_reporting import (
     write_tidal_unmatched_report,
 )
 from plex_playlist.tidal_config import parse_quality_preference
+from plex_playlist.rejected_terms import parse_rejected_terms
 from plex_playlist.tidal_user_auth import (
     TidalTokenStore,
     TidalUserTokenProvider,
@@ -246,6 +247,18 @@ def build_matching_config(
         ).split(",")
         if value.strip()
     ]
+    rejected_terms = parse_rejected_terms(
+        match_cfg.get("rejected_terms", fallback="")
+    )
+    normalized_preferred = set(parse_rejected_terms(preferred_versions))
+    overlap = sorted(normalized_preferred.intersection(rejected_terms))
+    if overlap:
+        logger.warning(
+            "Matching configuration overlap: %s appear in both "
+            "preferred_versions and rejected_terms; rejected_terms "
+            "takes precedence",
+            ", ".join(repr(value) for value in overlap),
+        )
 
     return MatchingConfig(
         threshold=match_cfg.getfloat("threshold", 85),
@@ -255,6 +268,7 @@ def build_matching_config(
         title_weight=match_cfg.getfloat("title_weight", 0.45),
         combined_weight=match_cfg.getfloat("combined_weight", 0.15),
         preferred_versions=preferred_versions,
+        rejected_terms=rejected_terms,
         min_title_score=match_cfg.getfloat("min_title_score", 95),
         fallback_title_score=match_cfg.getfloat("fallback_title_score", 80),
         debug=logging_cfg.getboolean("debug", False),
@@ -1048,6 +1062,7 @@ def run_lidarr_diagnostics(
     search_missing_albums: bool = False,
     client: LidarrClient | None = None,
     config_path: Path = Path("config.ini"),
+    rejected_terms: tuple[str, ...] | list[str] | None = None,
 ) -> list[LidarrDiagnosticRow]:
     """
     Check Plex-unmatched entries against Lidarr and write a CSV report.
@@ -1190,6 +1205,7 @@ def run_lidarr_diagnostics(
         remember_searches=remember_searches,
         retry_after_days=retry_after_days,
         progress_callback=log_progress,
+        rejected_terms=rejected_terms,
     )
 
     write_lidarr_diagnostic_csv(
@@ -1586,6 +1602,7 @@ def run_tidal_search_diagnostic(
         candidates=candidates,
         artist_aliases=matching_config.artist_aliases,
         allow_explicit=allow_explicit,
+        rejected_terms=matching_config.rejected_terms,
     )
 
     print(
@@ -1596,6 +1613,7 @@ def run_tidal_search_diagnostic(
             accepted=accepted,
             artist_aliases=matching_config.artist_aliases,
             allow_explicit=allow_explicit,
+            rejected_terms=matching_config.rejected_terms,
         )
     )
 
@@ -1695,6 +1713,7 @@ def run_tidal_unmatched_resolution(
         artist_aliases=matching_config.artist_aliases,
         quality_preference=quality_config.values,
         allow_explicit=allow_explicit,
+        rejected_terms=matching_config.rejected_terms,
     )
 
     unmatched = [
@@ -1742,6 +1761,7 @@ def run_tidal_unmatched_resolution(
                     resolution=resolution,
                     artist_aliases=matching_config.artist_aliases,
                     allow_explicit=allow_explicit,
+                    rejected_terms=matching_config.rejected_terms,
                 )
             )
             continue
@@ -2603,6 +2623,7 @@ def main() -> None:
                 search_missing_albums=args.lidarr_search,
                 client=lidarr_client,
                 config_path=args.config,
+                rejected_terms=matching_config.rejected_terms,
             )
             run_status.lidarr = ComponentHealth.available_health(
                 "completed"

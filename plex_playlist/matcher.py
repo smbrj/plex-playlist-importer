@@ -36,6 +36,7 @@ from plex_playlist.normalization import (
 )
 
 from plex_playlist.search_index import SearchIndex
+from plex_playlist.rejected_terms import rejected_term_reason
 
 
 
@@ -201,6 +202,19 @@ def _match_entry(
         f"  raw candidates     : {len(candidates):<4} ({raw_ms:.3f} ms)"
     )
 
+    candidates, rejected_reasons = _filter_rejected_candidates(
+        candidates,
+        config,
+    )
+    if rejected_reasons:
+        debug_lines.extend(
+            f"REJECTED: {reason}"
+            for reason in dict.fromkeys(rejected_reasons)
+        )
+    trace_lines.append(
+        f"  rejected terms     : {len(rejected_reasons):<4}"
+    )
+
     candidates = _prioritize_candidates(
         entry,
         candidates,
@@ -302,7 +316,12 @@ def _match_entry(
                 combined=0.0,
             ),
             confidence=ConfidenceLevel.NONE,
-            reason="No candidates",
+            reason=(
+                "All candidates rejected by configuration: "
+                + "; ".join(dict.fromkeys(rejected_reasons))
+                if rejected_reasons
+                else "No candidates"
+            ),
         )
        
        
@@ -650,6 +669,30 @@ def _candidate_set(
         return list(fallback_candidates.values()), source
 
     return [], "no candidates"
+
+def _filter_rejected_candidates(
+    candidates: list[LibraryTrack],
+    config: MatchingConfig,
+) -> tuple[list[LibraryTrack], list[str]]:
+    """Remove candidates matching configured rejected terms before ranking."""
+    if not config.rejected_terms:
+        return candidates, []
+
+    accepted: list[LibraryTrack] = []
+    reasons: list[str] = []
+    for track in candidates:
+        reason = rejected_term_reason(
+            title=track.title,
+            album=track.album,
+            version=getattr(track, "version", ""),
+            rejected_terms=config.rejected_terms,
+        )
+        if reason is None:
+            accepted.append(track)
+        else:
+            reasons.append(reason)
+    return accepted, reasons
+
 
 # ----------------------------------------------------------
 # Candidate prioritization

@@ -12,6 +12,7 @@ def format_tidal_search_results(
     accepted: list[TidalTrackCandidate],
     artist_aliases: dict[str, str] | None = None,
     allow_explicit: bool = True,
+    rejected_terms: tuple[str, ...] | list[str] | None = None,
 ) -> str:
     """Format a sanitized, read-only TIDAL search diagnostic."""
 
@@ -50,6 +51,7 @@ def format_tidal_search_results(
                 candidate=candidate,
                 artist_aliases=artist_aliases,
                 allow_explicit=allow_explicit,
+                rejected_terms=rejected_terms,
             )
             if reason:
                 lines.append(f"    Reason   : {reason}")
