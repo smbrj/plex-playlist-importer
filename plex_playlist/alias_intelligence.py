@@ -95,7 +95,7 @@ def export_plex_artists_csv(
 
 def suggest_aliases_csv(
     *,
-    unmatched_csv: Path,
+    unmatched_csv: Path | Iterable[Path],
     tracks: Iterable[LibraryTrack],
     aliases_path: Path,
     output_path: Path,
@@ -107,7 +107,14 @@ def suggest_aliases_csv(
     }, key=str.casefold)
 
     existing_aliases = load_alias_file(aliases_path)
-    requested_artists = _read_requested_artists(unmatched_csv)
+    unmatched_paths = (
+        [unmatched_csv]
+        if isinstance(unmatched_csv, (str, Path))
+        else list(unmatched_csv)
+    )
+    requested_artists: set[str] = set()
+    for unmatched_path in unmatched_paths:
+        requested_artists.update(_read_requested_artists(Path(unmatched_path)))
 
     rows: list[AliasSuggestionRow] = []
     for requested in sorted(requested_artists, key=str.casefold):
