@@ -1,0 +1,10 @@
+blank_issues_enabled: false
+
+contact_links:
+  - name: Security Vulnerability Report
+    url: https://github.com/smbrj/plex-playlist-importer/security/advisories/new
+    about: Report security vulnerabilities privately using GitHub Private Vulnerability Reporting.
+
+  - name: Documentation
+    url: https://github.com/smbrj/plex-playlist-importer
+    about: Please review the project documentation before opening an issue.
