@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import glob
 import configparser
 import logging
 import sys
@@ -857,8 +858,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     intelligence.add_argument(
         "--suggest-aliases",
-        action="store_true",
-        help="Generate alias suggestions from the unmatched CSV",
+        nargs="*",
+        metavar="CSV_OR_GLOB",
+        default=None,
+        help=(
+            "Generate alias suggestions from the configured unmatched CSV, "
+            "or from one or more explicit CSV paths/glob patterns"
+        ),
     )
     intelligence.add_argument(
         "--alias-suggestions-output",
@@ -1405,6 +1411,46 @@ def record_alias_effectiveness(
     )
 
 
+
+def resolve_alias_suggestion_inputs(
+    patterns: list[str] | None,
+    *,
+    default_path: Path,
+) -> list[Path]:
+    """Resolve explicit alias-input paths/globs or use the configured default."""
+
+    if not patterns:
+        candidates = [Path(default_path)]
+    else:
+        candidates: list[Path] = []
+        for pattern in patterns:
+            matches = [Path(value) for value in glob.glob(pattern)]
+            if not matches:
+                raise RuntimeError(
+                    f"Alias suggestion input matched no files: {pattern}"
+                )
+            candidates.extend(matches)
+
+    resolved: dict[str, Path] = {}
+    for candidate in candidates:
+        path = candidate.expanduser()
+        if not path.exists():
+            raise RuntimeError(
+                f"Alias suggestion input file not found: {path}"
+            )
+        if not path.is_file():
+            raise RuntimeError(
+                f"Alias suggestion input is not a file: {path}"
+            )
+        if path.suffix.casefold() != ".csv":
+            raise RuntimeError(
+                f"Alias suggestion input must be a CSV file: {path}"
+            )
+        absolute = path.resolve()
+        resolved[str(absolute).casefold()] = absolute
+
+    return sorted(resolved.values(), key=lambda value: str(value).casefold())
+
 def run_library_intelligence(
     *,
     args,
@@ -1413,7 +1459,7 @@ def run_library_intelligence(
 ) -> bool:
     requested = any([
         args.export_artists,
-        args.suggest_aliases,
+        args.suggest_aliases is not None,
         args.import_aliases is not None,
         args.audit_aliases,
     ])
@@ -1434,17 +1480,22 @@ def run_library_intelligence(
             len(rows),
         )
 
-    if args.suggest_aliases:
+    if args.suggest_aliases is not None:
+        input_paths = resolve_alias_suggestion_inputs(
+            args.suggest_aliases,
+            default_path=args.unmatched,
+        )
         rows = suggest_aliases_csv(
-            unmatched_csv=args.unmatched,
+            unmatched_csv=input_paths,
             tracks=tracks,
             aliases_path=aliases_path,
             output_path=args.alias_suggestions_output,
         )
         logger.info(
-            "Alias suggestions written: %s (%d rows)",
+            "Alias suggestions written: %s (%d rows from %d input file(s))",
             args.alias_suggestions_output,
             len(rows),
+            len(input_paths),
         )
 
     if args.import_aliases is not None:
