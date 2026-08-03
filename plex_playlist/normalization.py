@@ -104,6 +104,7 @@ VERSION_PATTERNS = {
     ],
     "instrumental": [
         r"instrumental",
+        r"karaoke",
     ],
     "radio": [
     r"radio edit",
