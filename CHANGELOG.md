@@ -4,7 +4,26 @@ All significant changes to Plex Playlist Importer are documented in this file.
 
 This changelog focuses on changes that materially affect application capabilities, operation, compatibility, or significant behavior. Minor implementation changes and routine bug fixes may be summarized or omitted.
 
-## [Unreleased]
+
+## CP027
+
+Added
+
+- --suggest-aliases now accepts one or more CSV input files.
+- Wildcard input patterns are supported.
+- Multiple unmatched reports can be analyzed in a single alias suggestion run.
+
+## CP028
+
+Added
+
+- Configurable rejected_terms matching policy.
+- Rejected terms are evaluated before preferred version selection.
+- Rejected candidates are identified in diagnostics and unmatched reports.
+- rejected_terms take precedence over preferred_versions.
+
+
+## [Public Beta via Github]
 
 ### Documentation 1.1 Maintenance
 

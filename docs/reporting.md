@@ -332,6 +332,14 @@ The application provides:
 
 ```text
 --suggest-aliases
+
+--suggest-aliases can accept multiple input files which will override the default reports/unmatched.csv location
+example:
+--suggest-aliases
+--suggest-aliases reports/unmatched-14.csv
+--suggest-aliases reports/unmatched-7.csv reports/unmatched-8.csv
+--suggest-aliases "reports/unmatched-*.csv"
+When multiple files are specified, PPI performs a single consolidated analysis and generates one alias suggestion report.
 ```
 
 The current output option is:

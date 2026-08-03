@@ -636,6 +636,7 @@ Current settings are:
 | `threshold` | Minimum acceptable overall match score |
 | `threads` | Number of matching worker threads |
 | `preferred_versions` | Preferred recording types in descending priority |
+| `rejected_terms` | Reject a track if the track, album, or metadata contains one of these comma delimited values |
 | `artist_weight` | Artist contribution to weighted scoring |
 | `album_artist_weight` | Album artist contribution |
 | `title_weight` | Track-title contribution |
@@ -658,6 +659,14 @@ Current configured threshold:
 
 ```ini
 threshold = 85
+```
+Candidates containing any of these terms in title, album, or version are rejected.
+rejected_terms takes precedence over preferred_versions. Empty value disables the function
+Example: rejected_terms = karaoke,tribute
+Current rejected terms:
+
+```ini
+rejected_terms = 
 ```
 
 Current preferred-version ordering:
