@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """
 V2 CLI Orchestrator
 
@@ -2623,7 +2624,7 @@ def main() -> None:
                 search_missing_albums=args.lidarr_search,
                 client=lidarr_client,
                 config_path=args.config,
-                rejected_terms=matching_config.rejected_terms,
+                rejected_terms=config.rejected_terms,
             )
             run_status.lidarr = ComponentHealth.available_health(
                 "completed"
