@@ -21,7 +21,7 @@ class FakeSession:
     def get(self, url, **kwargs):
         self.calls.append((url, kwargs))
 
-        if "/searchResults/" in url:
+        if url.endswith("/searchResults"):
             return FakeResponse({
                 "data": {"type": "searchResults", "id": "q"},
                 "included": [
@@ -148,7 +148,7 @@ def test_hydration_failure_is_recorded_and_sparse_candidate_preserved():
     class FailingHydrationSession(FakeSession):
         def get(self, url, **kwargs):
             self.calls.append((url, kwargs))
-            if "/searchResults/" in url:
+            if url.endswith("/searchResults"):
                 return FakeResponse({
                     "data": {"type": "searchResults", "id": "q"},
                     "included": [
@@ -188,7 +188,7 @@ def test_hydration_calls_are_paced_between_matching_candidates(monkeypatch):
     class TwoMatchingSession(FakeSession):
         def get(self, url, **kwargs):
             self.calls.append((url, kwargs))
-            if "/searchResults/" in url:
+            if url.endswith("/searchResults"):
                 return FakeResponse({
                     "data": {"type": "searchResults", "id": "q"},
                     "included": [
