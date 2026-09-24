@@ -1003,6 +1003,17 @@ def load_input_source(
         fallback="plex-playlist-importer/1.0",
     ).strip()
 
+    configured_artist_role_suffixes = cfg.get(
+        "xmplaylist",
+        "artist_role_suffixes",
+        fallback="v,o,p,w",
+    )
+    artist_role_suffixes = tuple(
+        value.strip()
+        for value in configured_artist_role_suffixes.split(",")
+        if value.strip()
+    )
+
     client = xm_client or XMPlaylistClient(
         base_url=base_url,
         timeout_seconds=timeout_seconds,
@@ -1031,6 +1042,7 @@ def load_input_source(
         hours=history_hours,
         max_requests=max_requests,
         max_tracks=max_tracks,
+        artist_role_suffixes=artist_role_suffixes,
         state_store=XMPlaylistStateStore(state_path),
     )
 
