@@ -200,3 +200,108 @@ def test_rejects_invalid_history_window(
             state_store=XMPlaylistStateStore(tmp_path / "xm.db"),
             now_factory=fixed_now,
         )
+
+
+
+@pytest.mark.parametrize(
+    ("raw_artist", "expected_artist"),
+    [
+        ("Tommy Dorsey v", "Tommy Dorsey"),
+        ("Bing Crosby o", "Bing Crosby"),
+        ("Freddy Martin p", "Freddy Martin"),
+        ("Johnny Mercer w", "Johnny Mercer"),
+    ],
+)
+def test_configured_artist_role_suffix_is_removed(
+    raw_artist: str,
+    expected_artist: str,
+) -> None:
+    client = Mock()
+    client.resolve_station.return_value = STATION
+    client.get_history_page.return_value = XMPlaylistHistoryPage(
+        station=STATION,
+        next_cursor=None,
+        plays=(
+            play("1", "2026-07-15T11:00:00Z", raw_artist, "Test Song"),
+        ),
+    )
+
+    result = ingest_station(
+        client=client,
+        station_number=14,
+        hours=8,
+        max_requests=2,
+        artist_role_suffixes=("v", "o", "p", "w"),
+        now_factory=fixed_now,
+    )
+
+    assert result.entries[0].artist == expected_artist
+
+
+def test_unconfigured_artist_role_suffix_is_preserved() -> None:
+    client = Mock()
+    client.resolve_station.return_value = STATION
+    client.get_history_page.return_value = XMPlaylistHistoryPage(
+        station=STATION,
+        next_cursor=None,
+        plays=(
+            play("1", "2026-07-15T11:00:00Z", "Tommy Dorsey v", "Test Song"),
+        ),
+    )
+
+    result = ingest_station(
+        client=client,
+        station_number=14,
+        hours=8,
+        max_requests=2,
+        artist_role_suffixes=("o", "p", "w"),
+        now_factory=fixed_now,
+    )
+
+    assert result.entries[0].artist == "Tommy Dorsey v"
+
+
+def test_empty_artist_role_suffixes_disable_normalization() -> None:
+    client = Mock()
+    client.resolve_station.return_value = STATION
+    client.get_history_page.return_value = XMPlaylistHistoryPage(
+        station=STATION,
+        next_cursor=None,
+        plays=(
+            play("1", "2026-07-15T11:00:00Z", "Tommy Dorsey v", "Test Song"),
+        ),
+    )
+
+    result = ingest_station(
+        client=client,
+        station_number=14,
+        hours=8,
+        max_requests=2,
+        artist_role_suffixes=(),
+        now_factory=fixed_now,
+    )
+
+    assert result.entries[0].artist == "Tommy Dorsey v"
+
+
+def test_role_suffix_must_be_separate_terminal_token() -> None:
+    client = Mock()
+    client.resolve_station.return_value = STATION
+    client.get_history_page.return_value = XMPlaylistHistoryPage(
+        station=STATION,
+        next_cursor=None,
+        plays=(
+            play("1", "2026-07-15T11:00:00Z", "Artistv", "Test Song"),
+        ),
+    )
+
+    result = ingest_station(
+        client=client,
+        station_number=14,
+        hours=8,
+        max_requests=2,
+        artist_role_suffixes=("v",),
+        now_factory=fixed_now,
+    )
+
+    assert result.entries[0].artist == "Artistv"

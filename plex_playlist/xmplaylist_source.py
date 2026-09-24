@@ -43,6 +43,7 @@ def ingest_station(
     hours: int = 8,
     max_requests: int = 10,
     max_tracks: int | None = None,
+    artist_role_suffixes: tuple[str, ...] = ("v", "o", "p", "w"),
     state_store: XMPlaylistStateStore | None = None,
     now_factory: Callable[[], datetime] | None = None,
 ) -> XMPlaylistIngestion:
@@ -147,7 +148,10 @@ def ingest_station(
                 reached_cutoff = True
                 continue
 
-            artist = _primary_artist(play)
+            artist = _primary_artist(
+                play,
+                artist_role_suffixes=artist_role_suffixes,
+            )
             title = play.title.strip()
             if not artist or not title:
                 continue
@@ -287,8 +291,41 @@ def ingest_station(
     )
 
 
-def _primary_artist(play: XMPlaylistPlay) -> str:
-    return play.artists[0].strip() if play.artists else ""
+def _primary_artist(
+    play: XMPlaylistPlay,
+    *,
+    artist_role_suffixes: tuple[str, ...] = ("v", "o", "p", "w"),
+) -> str:
+    if not play.artists:
+        return ""
+
+    artist = play.artists[0].strip()
+    return _strip_artist_role_suffix(
+        artist,
+        artist_role_suffixes=artist_role_suffixes,
+    )
+
+
+def _strip_artist_role_suffix(
+    artist: str,
+    *,
+    artist_role_suffixes: tuple[str, ...],
+) -> str:
+    """Strip one configured XMPlaylist role marker from an artist name."""
+
+    normalized_artist = artist.strip()
+    suffixes = {
+        suffix.strip()
+        for suffix in artist_role_suffixes
+        if suffix.strip()
+    }
+
+    for suffix in suffixes:
+        marker = f" {suffix}"
+        if normalized_artist.endswith(marker):
+            return normalized_artist[:-len(marker)].rstrip()
+
+    return normalized_artist
 
 
 def _parse_timestamp(value: str) -> datetime:
