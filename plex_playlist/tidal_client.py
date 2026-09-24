@@ -124,8 +124,7 @@ class TidalClient:
             return []
 
         token = self._get_access_token()
-        encoded_query = quote(query, safe="")
-        url = f"{self.api_base_url}/searchResults/{encoded_query}"
+        url = f"{self.api_base_url}/searchResults"
 
         try:
             response = self.session.get(
@@ -135,6 +134,7 @@ class TidalClient:
                     "Accept": "application/vnd.api+json",
                 },
                 params={
+                    "filter[query]": query,
                     "countryCode": self.country_code,
                     "include": "tracks,artists,albums",
                 },

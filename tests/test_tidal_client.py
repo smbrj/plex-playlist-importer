@@ -146,7 +146,7 @@ def test_client_credentials_auth_and_search():
     search_calls = [
         (url, kwargs)
         for url, kwargs in session.get_calls
-        if "/searchResults/" in url
+        if url.endswith("/searchResults")
     ]
     detail_calls = [
         (url, kwargs)
@@ -159,6 +159,7 @@ def test_client_credentials_auth_and_search():
 
     _, search_kwargs = search_calls[0]
     assert search_kwargs["params"] == {
+        "filter[query]": "Steely Dan Peg",
         "countryCode": "US",
         "include": "tracks,artists,albums",
     }
@@ -192,7 +193,7 @@ def test_access_token_is_reused():
 
     search_calls = [
         url for url, _ in session.get_calls
-        if "/searchResults/" in url
+        if url.endswith("/searchResults")
     ]
     detail_calls = [
         url for url, _ in session.get_calls

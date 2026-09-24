@@ -10,16 +10,20 @@ class FakeResponse:
 
 class FakeSession:
     def __init__(self):
+        self.get_url = None
         self.get_kwargs = None
 
     def post(self, url, **kwargs):
         class AuthResponse:
             status_code = 200
+
             def json(self):
                 return {"access_token": "token", "expires_in": 3600}
+
         return AuthResponse()
 
     def get(self, url, **kwargs):
+        self.get_url = url
         self.get_kwargs = kwargs
         return FakeResponse()
 
@@ -34,7 +38,11 @@ def test_search_uses_current_tidal_jsonapi_request_shape():
 
     client.search_tracks("Steely Dan", "Peg")
 
+    assert session.get_url == (
+        "https://openapi.tidal.com/v2/searchResults"
+    )
     assert session.get_kwargs["params"] == {
+        "filter[query]": "Steely Dan Peg",
         "countryCode": "US",
         "include": "tracks,artists,albums",
     }
